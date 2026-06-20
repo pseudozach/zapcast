@@ -1,0 +1,19 @@
+{
+  "name": "ZapCast",
+  "description": "Viewer-funded peer-to-peer live streaming.",
+  "type": "desktop",
+  "main": "src/main.js",
+  "files": [
+    "src",
+    "ui",
+    "broadcaster",
+    "player",
+    "p2p",
+    "payments",
+    "reports",
+    "utils",
+    "index.html",
+    "package.json",
+    "README.md"
+  ]
+}

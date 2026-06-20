@@ -1,0 +1,51 @@
+{
+  "name": "zapcast",
+  "version": "0.1.0",
+  "description": "Viewer-funded peer-to-peer live streaming MVP for Pear.",
+  "type": "module",
+  "main": "src/main.js",
+  "pear": {
+    "pre": "pear-electron/pre",
+    "gui": {
+      "width": 1180,
+      "height": 820,
+      "minWidth": 920,
+      "minHeight": 640,
+      "center": true,
+      "movable": true,
+      "minimizable": true,
+      "maximizable": true,
+      "closable": true,
+      "closeHides": false,
+      "hasShadow": true,
+      "backgroundColor": "#f5f7f9"
+    }
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-pear-electron.mjs",
+    "build:wallet": "node scripts/build-wallet-client.mjs",
+    "start": "node scripts/start-instance.mjs",
+    "check": "node --check src/main.js && node --check src/app-controller.js && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/vendor/wallet-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check scripts/start-instance.mjs && node --check scripts/build-wallet-client.mjs",
+    "dev:node": "node src/main.js --role broadcaster"
+  },
+  "dependencies": {
+    "b4a": "^1.6.7",
+    "bare-events": "^2.9.1",
+    "bare-fs": "^4.7.2",
+    "bare-path": "^3.0.1",
+    "bare-process": "^4.4.1",
+    "bare-subprocess": "^6.1.0",
+    "corestore": "^7.4.5",
+    "hypercore": "^11.17.0",
+    "hypercore-crypto": "^3.5.0",
+    "hyperswarm": "^4.12.1",
+    "pear-bridge": "^1.2.5",
+    "pear-electron": "1.7.28",
+    "protomux": "^3.10.1",
+    "viem": "^2.52.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "pear-interface": "^1.0.0"
+  }
+}

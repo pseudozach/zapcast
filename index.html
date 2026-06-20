@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZapCast</title>
+    <link rel="stylesheet" href="./ui/style.css">
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>ZapCast</h1>
+          <p>Viewer-funded peer-to-peer live streaming.</p>
+        </div>
+        <div class="topbar-pills">
+          <div class="balance-pill">
+            <span id="walletBalance">Balance: -- USDC</span>
+            <button type="button" id="refreshBalance" class="icon-button compact" title="Refresh balance" aria-label="Refresh balance">↻</button>
+          </div>
+          <div class="peer-pill" id="peerId">Peer: pending</div>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="ZapCast sections">
+        <button data-tab="home" class="active">Home</button>
+        <button data-tab="streamer">Streamer</button>
+        <button data-tab="viewer">Viewer</button>
+        <button data-tab="debug">Stats</button>
+        <button data-tab="settings">Settings</button>
+      </nav>
+
+      <main>
+        <section id="home" class="tab active">
+          <div class="hero">
+            <h2>Watchers can relay streams and earn sats.</h2>
+            <div class="actions">
+              <button id="homeCreate">Start Streaming</button>
+              <button id="homeJoin" class="secondary">Join Stream</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="streamer" class="tab">
+          <div class="grid two">
+            <form id="streamerForm" class="panel">
+              <h2>Streamer</h2>
+              <label>RTMP URL <input id="rtmpUrl" placeholder="rtmp://127.0.0.1/live/zapcast"></label>
+              <div id="rtmpError" class="field-error" hidden></div>
+              <label>Video file fallback <input id="videoFile" type="file" accept="video/*"></label>
+              <div id="selectedVideo" class="file-status">No video selected</div>
+              <div class="actions">
+                <button type="button" id="startIngest">Start Streaming</button>
+                <button type="button" id="stopIngest" class="danger" disabled>Stop Streaming</button>
+              </div>
+              <p class="hint">RTMP is primary. Use a local file only when testing without RTMP.</p>
+            </form>
+            <div class="panel">
+              <h2>Stream</h2>
+              <label>Shareable stream ID <textarea id="streamIdOut" rows="3" readonly placeholder="Generated when streaming starts."></textarea></label>
+              <button type="button" id="copyStreamId" class="secondary" disabled>Copy Stream ID</button>
+              <div class="panel-heading section-heading">
+                <h2>Broadcaster Metrics</h2>
+                <button type="button" id="copyBroadcasterMetrics" class="copy-button">Copy</button>
+              </div>
+              <div id="broadcasterMetrics" class="metrics"></div>
+              <div class="panel-heading section-heading">
+                <h3>ffmpeg</h3>
+                <button type="button" id="copyFfmpegStatus" class="copy-button">Copy</button>
+              </div>
+              <pre id="ffmpegStatus"></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="viewer" class="tab">
+          <div class="grid two">
+            <form class="panel">
+              <h2>Viewer</h2>
+              <label>Stream ID <textarea id="streamIdIn" rows="3"></textarea></label>
+              <div class="actions">
+                <button type="button" id="joinStream">Join Stream</button>
+                <button type="button" id="stopViewing" class="secondary">Stop Viewing</button>
+              </div>
+              <video id="video" controls autoplay muted playsinline></video>
+              <div class="tip-row">
+                <label>Tip amount <input id="tipAmount" inputmode="decimal" placeholder="0.1"></label>
+                <button type="button" id="tipBroadcaster" class="secondary">Tip Broadcaster</button>
+              </div>
+              <div id="tipStatus" class="field-status"></div>
+            </form>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Viewer Metrics</h2>
+                <button type="button" id="copyViewerMetrics" class="copy-button">Copy</button>
+              </div>
+              <div id="viewerMetrics" class="metrics"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="settings" class="tab">
+          <div class="grid two">
+            <div class="panel">
+              <h2>Payments</h2>
+              <div id="walletDetails" class="metrics"></div>
+              <label>Wallet secret
+                <div class="secret-row">
+                  <input id="walletSecret" type="password" readonly value="Hidden">
+                  <button type="button" id="revealWallet" class="icon-button" title="Reveal wallet secret" aria-label="Reveal wallet secret">👁</button>
+                </div>
+              </label>
+              <label>Forwarding address <input id="forwardingAddress" placeholder="0x..."></label>
+              <label>Auto-forward threshold <input id="forwardThreshold" inputmode="decimal" placeholder="0.1"></label>
+              <div class="actions">
+                <button type="button" id="savePaymentSettings">Save Payment Settings</button>
+              </div>
+              <div id="paymentStats" class="metrics"></div>
+            </div>
+            <div class="panel">
+              <h2>Topology Controls</h2>
+              <label class="checkbox-row">Deny direct broadcaster <input type="checkbox" id="denyDirectBroadcaster"></label>
+              <label>Preferred relay peer <input id="preferRelayPeer"></label>
+              <label>Allow peer <input id="allowPeer"></label>
+              <label>Block peer <input id="blockPeer"></label>
+              <label>Max broadcaster connections <input id="maxBroadcasterConnections" type="number" min="0"></label>
+              <button type="button" id="applyTopology">Apply</button>
+            </div>
+          </div>
+          <div class="panel narrow">
+            <h2>Export Reports</h2>
+            <button id="exportJson">Export JSON</button>
+            <pre id="reportOutput"></pre>
+          </div>
+        </section>
+
+        <section id="debug" class="tab">
+          <div class="grid two">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Connected Peers</h2>
+                <button type="button" id="copyConnectedPeers" class="copy-button">Copy</button>
+              </div>
+              <table><tbody id="peersTable"></tbody></table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Metrics</h2>
+              <button type="button" id="copyAllMetrics" class="copy-button">Copy</button>
+            </div>
+            <div id="allMetrics" class="metrics"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Chunk Sources</h2>
+              <button type="button" id="copyChunkSources" class="copy-button">Copy</button>
+            </div>
+            <table><tbody id="chunkSources"></tbody></table>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Event Log</h2>
+              <button type="button" id="copyEventLog" class="copy-button">Copy</button>
+            </div>
+            <table><tbody id="eventLog"></tbody></table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+    <script type="module" src="./ui/runtime.js"></script>
+    <script type="module" src="./ui/app.js"></script>
+  </body>
+</html>
