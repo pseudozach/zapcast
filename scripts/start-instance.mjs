@@ -4,10 +4,16 @@ import { randomBytes } from 'node:crypto'
 import { appendFile, mkdir, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { build } from 'esbuild'
+import { postJson } from '../utils/http-json.js'
 
 const PORT = 43741
 const PREFIX = '[zapcast-launcher]'
 const COMMANDS_FILE = join(process.cwd(), 'tmp', 'window-commands.jsonl')
+const ARC_RPC_URLS = [
+  'https://rpc.quicknode.testnet.arc.network',
+  'https://rpc.blockdaemon.testnet.arc.network',
+  'https://rpc.testnet.arc.network'
+]
 
 log(`starting from ${process.cwd()}`)
 
@@ -28,6 +34,15 @@ const server = http.createServer((req, res) => {
     }, err => {
       log(`failed to queue window request: ${err.message}`)
       sendJson(res, 500, { ok: false, error: err.message })
+    })
+    return
+  }
+
+  if (req.url === '/arc-rpc') {
+    readJson(req).then(forwardArcRpc).then(result => {
+      sendJson(res, 200, result)
+    }, err => {
+      sendJson(res, 200, rpcErrorResponse(null, err))
     })
     return
   }
@@ -99,9 +114,8 @@ async function buildWalletClient () {
 
 async function requestExistingWindow () {
   try {
-    const response = await fetch(`http://127.0.0.1:${PORT}/open`, { method: 'POST' })
-    if (!response.ok) log(`existing instance returned HTTP ${response.status}`)
-    return response.ok
+    await postJson(`http://127.0.0.1:${PORT}/open`, {})
+    return true
   } catch (err) {
     log(`failed to contact existing instance: ${err.message}`)
     return false
@@ -117,6 +131,35 @@ async function queueWindowCommand (command) {
   await mkdir(dirname(COMMANDS_FILE), { recursive: true })
   await appendFile(COMMANDS_FILE, `${JSON.stringify(command)}\n`)
   log(`queued new window request for instance ${command.instanceId} in ${COMMANDS_FILE}`)
+}
+
+async function readJson (req) {
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  const text = Buffer.concat(chunks).toString()
+  return text ? JSON.parse(text) : {}
+}
+
+async function forwardArcRpc (body) {
+  let lastError = null
+  for (const rpcUrl of ARC_RPC_URLS) {
+    try {
+      return await postJson(rpcUrl, body)
+    } catch (err) {
+      lastError = err
+      log(`Arc RPC forward failed via ${rpcUrl}: ${err.message}`)
+    }
+  }
+  return rpcErrorResponse(body, lastError)
+}
+
+function rpcErrorResponse (body, err) {
+  const error = {
+    code: -32000,
+    message: `Arc RPC unavailable: ${err?.message || 'request failed'}`
+  }
+  if (Array.isArray(body)) return body.map(item => ({ jsonrpc: '2.0', id: item?.id ?? null, error }))
+  return { jsonrpc: '2.0', id: body?.id ?? null, error }
 }
 
 function log (message) {

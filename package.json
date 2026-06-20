@@ -25,7 +25,7 @@
     "postinstall": "node scripts/patch-pear-electron.mjs",
     "build:wallet": "node scripts/build-wallet-client.mjs",
     "start": "node scripts/start-instance.mjs",
-    "check": "node --check src/main.js && node --check src/app-controller.js && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/vendor/wallet-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check scripts/start-instance.mjs && node --check scripts/build-wallet-client.mjs",
+    "check": "node --check src/main.js && node --check src/app-controller.js && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/vendor/wallet-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check utils/http-json.js && node --check scripts/start-instance.mjs && node --check scripts/build-wallet-client.mjs",
     "dev:node": "node src/main.js --role broadcaster"
   },
   "dependencies": {

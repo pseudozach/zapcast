@@ -3,8 +3,10 @@ import Bridge from 'pear-bridge'
 import { ZapCastApp } from './app-controller.js'
 import { DEFAULTS } from './config.js'
 import { fsPromises, joinPath } from '../utils/platform.js'
+import { postJson } from '../utils/http-json.js'
 
 const WINDOW_COMMANDS_FILE = joinPath(DEFAULTS.dataDirectory, 'window-commands.jsonl')
+const ARC_RPC_PROXY_URL = 'http://127.0.0.1:43741/arc-rpc'
 
 const runtime = new Runtime()
 log('runtime created')
@@ -39,6 +41,17 @@ function attachApi (bridge, apps) {
         log(`static ${req.method || 'GET'} ${url.pathname}`)
       }
       return staticHandler.call(bridge.server, req, res)
+    }
+
+    if (url.pathname === '/api/arc-rpc') {
+      try {
+        const body = await readJson(req)
+        const result = await forwardArcRpc(body)
+        sendRawJson(res, 200, result)
+      } catch (err) {
+        sendRawJson(res, 200, rpcErrorResponse(null, err))
+      }
+      return
     }
 
     const instanceId = url.searchParams.get('instance') || 'main'
@@ -125,6 +138,30 @@ function sendJson (res, statusCode, payload) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(payload))
+}
+
+function sendRawJson (res, statusCode, payload) {
+  res.statusCode = statusCode
+  res.setHeader('Content-Type', 'application/json')
+  res.end(JSON.stringify(payload))
+}
+
+async function forwardArcRpc (body) {
+  try {
+    return await postJson(ARC_RPC_PROXY_URL, body)
+  } catch (err) {
+    log(`Arc RPC local proxy failed: ${err.message}`)
+    return rpcErrorResponse(body, err)
+  }
+}
+
+function rpcErrorResponse (body, err) {
+  const error = {
+    code: -32000,
+    message: `Arc RPC unavailable: ${err?.message || 'request failed'}`
+  }
+  if (Array.isArray(body)) return body.map(item => ({ jsonrpc: '2.0', id: item?.id ?? null, error }))
+  return { jsonrpc: '2.0', id: body?.id ?? null, error }
 }
 
 async function drainWindowCommands () {

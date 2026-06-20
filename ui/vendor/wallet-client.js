@@ -13926,26 +13926,6 @@ function hashString(str, seed = 0) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-// node_modules/viem/_esm/utils/chain/defineChain.js
-function defineChain(chain2) {
-  const chainInstance = {
-    formatters: void 0,
-    fees: void 0,
-    serializers: void 0,
-    ...chain2
-  };
-  function extend(base) {
-    return (fnOrExtended) => {
-      const properties = typeof fnOrExtended === "function" ? fnOrExtended(base) : fnOrExtended;
-      const combined = { ...base, ...properties };
-      return Object.assign(combined, { extend: extend(combined) });
-    };
-  }
-  return Object.assign(chainInstance, {
-    extend: extend(chainInstance)
-  });
-}
-
 // node_modules/viem/_esm/utils/index.js
 init_fromHex();
 
@@ -18770,44 +18750,6 @@ function http(url, config = {}) {
 
 // node_modules/viem/_esm/index.js
 init_formatUnits();
-
-// node_modules/viem/_esm/chains/definitions/arcTestnet.js
-var arcTestnet = /* @__PURE__ */ defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: {
-    name: "USDC",
-    symbol: "USDC",
-    decimals: 18
-  },
-  rpcUrls: {
-    default: {
-      http: [
-        "https://rpc.testnet.arc.network",
-        "https://rpc.quicknode.testnet.arc.network",
-        "https://rpc.blockdaemon.testnet.arc.network"
-      ],
-      webSocket: [
-        "wss://rpc.testnet.arc.network",
-        "wss://rpc.quicknode.testnet.arc.network"
-      ]
-    }
-  },
-  blockExplorers: {
-    default: {
-      name: "ArcScan",
-      url: "https://testnet.arcscan.app",
-      apiUrl: "https://testnet.arcscan.app/api"
-    }
-  },
-  contracts: {
-    multicall3: {
-      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
-      blockCreated: 0
-    }
-  },
-  testnet: true
-});
 
 // node_modules/@scure/bip32/lib/esm/index.js
 init_modular();
@@ -40107,6 +40049,30 @@ var wordlist10 = `\u7684
 \u6B47`.split("\n");
 
 // ui/wallet-client.js
+var ARC_RPC_PROXY = "http://127.0.0.1:43741/arc-rpc";
+var ARC_EXPLORER_URL = "https://testnet.arcscan.app";
+var zapcastArcTestnet = {
+  id: 5042002,
+  name: "Arc Testnet",
+  nativeCurrency: {
+    name: "USDC",
+    symbol: "USDC",
+    decimals: 18
+  },
+  rpcUrls: {
+    default: {
+      http: [ARC_RPC_PROXY],
+      webSocket: []
+    }
+  },
+  blockExplorers: {
+    default: {
+      name: "ArcScan",
+      url: ARC_EXPLORER_URL
+    }
+  },
+  testnet: true
+};
 function generateWallet() {
   const mnemonic = generateMnemonic2(wordlist2);
   const account = mnemonicToAccount(mnemonic);
@@ -40119,8 +40085,8 @@ async function sendNativeUsdc({ mnemonic, to, amount }) {
   const account = mnemonicToAccount(mnemonic);
   const client = createWalletClient({
     account,
-    chain: arcTestnet,
-    transport: http()
+    chain: zapcastArcTestnet,
+    transport: http(ARC_RPC_PROXY)
   });
   const txHash = await client.sendTransaction({
     to,
@@ -40128,13 +40094,13 @@ async function sendNativeUsdc({ mnemonic, to, amount }) {
   });
   return {
     txHash,
-    explorerUrl: `${arcTestnet.blockExplorers.default.url}/tx/${txHash}`
+    explorerUrl: `${ARC_EXPLORER_URL}/tx/${txHash}`
   };
 }
 async function getNativeUsdcBalance({ address }) {
   const client = createPublicClient({
-    chain: arcTestnet,
-    transport: http()
+    chain: zapcastArcTestnet,
+    transport: http(ARC_RPC_PROXY)
   });
   const value = await client.getBalance({ address });
   return {
