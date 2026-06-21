@@ -3,7 +3,7 @@ import { generateStreamIdentity, encodeStreamId, parseStreamId, generateInstance
 import { EventLog } from '../utils/logger.js'
 import { Metrics } from '../p2p/stats.js'
 import { TopologyPolicy } from '../p2p/topology.js'
-import { StreamFeed, decodeRecord } from '../p2p/stream-feed.js'
+import { StreamFeed } from '../p2p/stream-feed.js'
 import { ZapSwarm } from '../p2p/swarm.js'
 import { attachReplication } from '../p2p/replication.js'
 import { PeerControl } from '../p2p/peer-control.js'
@@ -20,6 +20,7 @@ export class ZapCastApp extends SimpleEmitter {
     super()
     const cli = parseCliArgs(options.argv || runtimeArgv().slice(2))
     this.instanceId = options.instanceId || generateInstanceId()
+    this.walletSlot = normalizeWalletSlot(options.walletSlot)
     this.dataPaths = {
       broadcaster: roleDataPaths('broadcaster', this.instanceId),
       viewer: roleDataPaths('viewer', this.instanceId)
@@ -34,7 +35,12 @@ export class ZapCastApp extends SimpleEmitter {
     this.control = null
     this.ingest = null
     this.payments = splitZap({ sats: 0 })
-    this.wallet = new PaymentWallet({ directory: joinPath(DEFAULTS.walletDirectory, this.instanceId), logger: this.eventLog })
+    this.wallet = new PaymentWallet({
+      directory: joinPath(DEFAULTS.walletDirectory, 'slots', `slot-${this.walletSlot}`),
+      legacyDirectory: DEFAULTS.walletDirectory,
+      slot: this.walletSlot,
+      logger: this.eventLog
+    })
     this.walletError = ''
     this.walletReady = this.initWallet()
     this.records = []
@@ -195,11 +201,14 @@ export class ZapCastApp extends SimpleEmitter {
 
   startViewerLoop () {
     if (this.viewerTimer) return
-    let next = 0
+    let next = null
+    let initDelivered = false
     let lastLoggedLength = -1
     this.metrics.startSession()
     this.metrics.set({ playbackState: 'buffering' })
     this.viewerTimer = setInterval(async () => {
+      if (this.viewerTickRunning) return
+      this.viewerTickRunning = true
       try {
         const length = await this.streamFeed.update()
         if (length !== lastLoggedLength) {
@@ -211,35 +220,61 @@ export class ZapCastApp extends SimpleEmitter {
           })
           lastLoggedLength = length
         }
-        while (next < length) {
-          const encoded = await this.streamFeed.core.get(next)
-          const record = decodeRecord(encoded)
-          this.records.push(record)
-          if (this.records.length > DEFAULTS.chunkRetention) this.records.shift()
-          const source = this.metrics.snapshot().connectedToBroadcaster ? 'broadcaster-or-peer' : 'relay-peer'
-          this.metrics.recordSource(record.meta.seq, source, record.meta.byteLength)
-          this.metrics.set({
-            playbackState: 'buffering',
-            currentSequence: record.meta.seq,
-            latestSequence: Math.max(record.meta.seq, this.metrics.snapshot().latestSequence),
-            bufferSize: this.records.length,
-            liveLatency: Math.max(0, Date.now() - Date.parse(record.meta.appendedAt))
-          })
-          this.eventLog.add('chunk_received', {
+        if (length === 0) return
+
+        if (!initDelivered) {
+          const init = await this.streamFeed.get(0)
+          if (!init?.meta?.isInitSegment && init?.type !== 'init') {
+            throw new Error('Stream feed does not begin with an initialization segment.')
+          }
+          this.acceptViewerRecord(init)
+          initDelivered = true
+          const liveWindowChunks = Math.max(1, Math.ceil(10 / DEFAULTS.chunkDurationSeconds))
+          next = Math.max(1, length - liveWindowChunks)
+          const skipped = Math.max(0, next - 1)
+          this.metrics.set({ skippedChunks: skipped })
+          this.eventLog.add('live_edge_selected', {
             role: 'viewer',
             peerId: this.metrics.peerId,
-            streamId: record.meta.streamId,
-            seq: record.meta.seq,
-            bytes: record.meta.byteLength,
-            sourcePeerId: source
+            streamId: this.metrics.snapshot().streamId,
+            seq: next,
+            message: `feed length ${length}, skipped ${skipped} historical chunks`
           })
-          this.emit('record', record)
+        }
+
+        while (next < length) {
+          this.acceptViewerRecord(await this.streamFeed.get(next))
           next++
         }
       } catch (err) {
         this.metrics.recordError(err)
+      } finally {
+        this.viewerTickRunning = false
       }
     }, 750)
+  }
+
+  acceptViewerRecord (record) {
+    this.records.push(record)
+    if (this.records.length > DEFAULTS.chunkRetention) this.records.shift()
+    const source = this.metrics.snapshot().connectedToBroadcaster ? 'broadcaster-or-peer' : 'relay-peer'
+    this.metrics.recordSource(record.meta.seq, source, record.meta.byteLength)
+    this.metrics.set({
+      playbackState: 'buffering',
+      currentSequence: record.meta.seq,
+      latestSequence: Math.max(record.meta.seq, this.metrics.snapshot().latestSequence),
+      bufferSize: this.records.length,
+      liveLatency: Math.max(0, Date.now() - Date.parse(record.meta.appendedAt))
+    })
+    this.eventLog.add('chunk_received', {
+      role: 'viewer',
+      peerId: this.metrics.peerId,
+      streamId: record.meta.streamId,
+      seq: record.meta.seq,
+      bytes: record.meta.byteLength,
+      sourcePeerId: source
+    })
+    this.emit('record', record)
   }
 
   recordsAfter (after = -1) {
@@ -354,6 +389,7 @@ export class ZapCastApp extends SimpleEmitter {
     return {
       appVersion: APP_VERSION,
       instanceId: this.instanceId,
+      walletSlot: this.walletSlot,
       defaults: DEFAULTS,
       dataPaths: this.currentDataPaths,
       topology: this.topology.snapshot()
@@ -384,6 +420,7 @@ export class ZapCastApp extends SimpleEmitter {
       clearInterval(this.viewerTimer)
       this.viewerTimer = null
     }
+    this.viewerTickRunning = false
     this.ingest?.stop()
     this.ingest = null
     await this.control?.destroy()
@@ -399,6 +436,11 @@ export class ZapCastApp extends SimpleEmitter {
     await this.closeActiveSession()
     await cleanupInstanceData(this.dataPaths)
   }
+}
+
+function normalizeWalletSlot (value) {
+  const slot = Number(value)
+  return Number.isInteger(slot) && slot > 0 ? slot : 1
 }
 
 function validateRtmpUrl (value) {

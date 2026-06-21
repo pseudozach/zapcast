@@ -9,6 +9,9 @@ export class MsePlayer {
     this.appended = 0
     this.lastAppend = null
     this.objectUrl = ''
+    this.failed = false
+    this.lastError = ''
+    this.positioned = false
   }
 
   async start (mime) {
@@ -23,35 +26,62 @@ export class MsePlayer {
     this.sourceBuffer.mode = 'segments'
     this.sourceBuffer.addEventListener('updateend', () => {
       this.appended++
+      this.positionAtBufferedStart()
       this.video.play?.().catch?.(() => {})
       this.flush()
     })
-    this.sourceBuffer.addEventListener('error', () => this.onerror?.(new Error('MediaSource buffer error')))
-    this.video.addEventListener('error', () => this.onerror?.(this.video.error || new Error('Video playback error')))
+    this.sourceBuffer.addEventListener('error', () => this.fail(new Error('MediaSource buffer error')))
+    this.video.addEventListener('error', () => this.fail(this.video.error || new Error('Video playback error')))
     this.started = true
     return true
   }
 
   append (buffer, meta = {}) {
-    if (!this.started) return
+    if (!this.started || this.failed) return
     this.queue.push({ buffer, meta })
     this.flush()
   }
 
   flush () {
-    if (!this.sourceBuffer || this.sourceBuffer.updating || this.queue.length === 0) return
+    if (!this.sourceBuffer || this.sourceBuffer.updating || this.queue.length === 0 || this.failed) return
+    if (this.mediaSource?.readyState !== 'open') {
+      this.fail(new Error('MediaSource closed before queued segments were appended.'))
+      return
+    }
     const next = this.queue.shift()
     try {
       this.lastAppend = next.meta
       this.sourceBuffer.appendBuffer(next.buffer)
     } catch (err) {
-      this.onerror?.(new Error(`append failed seq=${next.meta?.seq ?? ''} type=${next.meta?.type ?? ''} bytes=${next.buffer?.byteLength || 0}: ${err.message}`))
+      this.fail(new Error(`append failed seq=${next.meta?.seq ?? ''} type=${next.meta?.type ?? ''} bytes=${next.buffer?.byteLength || 0}: ${err.message}`))
     }
+  }
+
+  fail (err) {
+    if (this.failed) return
+    this.failed = true
+    this.started = false
+    this.lastError = err?.message || String(err)
+    this.queue.length = 0
+    this.onerror?.(err)
+  }
+
+  positionAtBufferedStart () {
+    if (this.positioned || !this.video?.buffered?.length) return
+    const start = this.video.buffered.start(0)
+    const end = this.video.buffered.end(0)
+    if (this.video.currentTime < start || this.video.currentTime > end) {
+      this.video.currentTime = Math.min(end, start + 0.05)
+    }
+    this.positioned = true
   }
 
   stop () {
     this.queue.length = 0
     this.started = false
+    this.failed = false
+    this.lastError = ''
+    this.positioned = false
     if (this.mediaSource?.readyState === 'open') {
       try {
         this.mediaSource.endOfStream()
@@ -66,6 +96,8 @@ export class MsePlayer {
   snapshot () {
     return {
       started: this.started,
+      failed: this.failed,
+      lastError: this.lastError,
       appended: this.appended,
       queueLength: this.queue.length,
       sourceBufferUpdating: Boolean(this.sourceBuffer?.updating),

@@ -55,7 +55,8 @@ function attachApi (bridge, apps) {
     }
 
     const instanceId = url.searchParams.get('instance') || 'main'
-    const app = getApp(apps, instanceId)
+    const walletSlot = normalizeWalletSlot(url.searchParams.get('walletSlot'))
+    const app = getApp(apps, instanceId, walletSlot)
     try {
       const body = await readJson(req)
       const result = await dispatchApi(app, url.pathname, body, url)
@@ -68,18 +69,26 @@ function attachApi (bridge, apps) {
   })
 }
 
-function getApp (apps, instanceId) {
+function getApp (apps, instanceId, walletSlot) {
   let app = apps.get(instanceId)
   if (app) return app
-  app = new ZapCastApp({ instanceId })
+  app = new ZapCastApp({ instanceId, walletSlot })
   apps.set(instanceId, app)
   return app
 }
 
+function normalizeWalletSlot (value) {
+  const slot = Number(value)
+  return Number.isInteger(slot) && slot > 0 ? slot : 1
+}
+
 async function dispatchApi (app, pathname, body, url) {
   switch (pathname) {
-    case '/api/status':
-      return app.status()
+    case '/api/status': {
+      const status = await app.status()
+      const recordAfter = Number(url.searchParams.get('recordAfter') || -1)
+      return { ...status, records: app.recordsAfter(recordAfter) }
+    }
     case '/api/wallet':
       return app.walletSnapshot()
     case '/api/records':

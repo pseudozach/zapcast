@@ -1,8 +1,9 @@
 import ui from 'pear-electron'
 
 class ApiClient {
-  constructor (instanceId) {
+  constructor (instanceId, walletSlot) {
     this.instanceId = instanceId
+    this.walletSlot = walletSlot
     this.listeners = new Map()
     this.lastEventCount = 0
     this.lastRecordSeq = -1
@@ -18,13 +19,12 @@ class ApiClient {
     }
     this.failedPolls = new Map()
     this.suspendedPolls = new Set()
+    this.pollingStatus = false
     this.ready = this.initialize()
     this.poll()
-    this.pollRecords()
     this.pollWindowCommands()
     this.timers = [
       setInterval(() => this.poll(), 1000),
-      setInterval(() => this.pollRecords(), 500),
       setInterval(() => this.pollWindowCommands(), 1000)
     ]
   }
@@ -148,39 +148,39 @@ class ApiClient {
   }
 
   async poll () {
-    if (this.suspendedPolls.has('status')) return
+    if (this.suspendedPolls.has('status') || this.pollingStatus) return
+    this.pollingStatus = true
     try {
-      const status = await this.get('/api/status')
+      const after = this.lastRecordSeq
+      this.recordPollDebug.polls++
+      this.recordPollDebug.lastAfter = after
+      const response = await this.get(`/api/status?recordAfter=${encodeURIComponent(after)}`)
+      const records = Array.isArray(response.records) ? response.records : []
+      const { records: ignored, ...status } = response
       this.resetPollError('status')
       this.lastStatus = status
       this.emit('metrics', status.metrics)
       const events = status.events || []
       for (const event of events.slice(this.lastEventCount)) this.emit('event', event)
       this.lastEventCount = events.length
+      this.emitRecords(records)
     } catch (err) {
       this.handlePollError('status', err)
+    } finally {
+      this.pollingStatus = false
     }
   }
 
-  async pollRecords () {
-    if (this.suspendedPolls.has('record')) return
-    try {
-      this.recordPollDebug.polls++
-      this.recordPollDebug.lastAfter = this.lastRecordSeq
-      const records = await this.get(`/api/records?after=${encodeURIComponent(this.lastRecordSeq)}`)
-      this.resetPollError('record')
-      this.recordPollDebug.lastCount = Array.isArray(records) ? records.length : 0
-      for (const record of records) {
-        const seq = Number(record.meta?.seq ?? -1)
-        this.recordPollDebug.recordsReceived++
-        this.recordPollDebug.lastSeq = seq
-        this.recordPollDebug.lastDataShape = describeData(record.data)
-        this.emit('record', record)
-        this.recordPollDebug.recordsEmitted++
-        this.lastRecordSeq = Math.max(this.lastRecordSeq, seq)
-      }
-    } catch (err) {
-      this.handlePollError('record', err)
+  emitRecords (records) {
+    this.recordPollDebug.lastCount = records.length
+    for (const record of records) {
+      const seq = Number(record.meta?.seq ?? -1)
+      this.recordPollDebug.recordsReceived++
+      this.recordPollDebug.lastSeq = seq
+      this.recordPollDebug.lastDataShape = describeData(record.data)
+      this.emit('record', record)
+      this.recordPollDebug.recordsEmitted++
+      this.lastRecordSeq = Math.max(this.lastRecordSeq, seq)
     }
   }
 
@@ -211,7 +211,7 @@ class ApiClient {
       for (const command of commands) {
         if (command.type !== 'open-window') continue
         console.info(`ZapCast opening secondary window for instance ${command.instanceId}`)
-        const win = new ui.Window(`./index.html?instance=${encodeURIComponent(command.instanceId)}`, {
+        const win = new ui.Window(`./index.html?instance=${encodeURIComponent(command.instanceId)}&walletSlot=${encodeURIComponent(command.walletSlot)}`, {
           width: 1180,
           height: 820,
           minWidth: 920,
@@ -256,7 +256,7 @@ class ApiClient {
 
   path (path) {
     const separator = path.includes('?') ? '&' : '?'
-    return `${path}${separator}instance=${encodeURIComponent(this.instanceId)}`
+    return `${path}${separator}instance=${encodeURIComponent(this.instanceId)}&walletSlot=${encodeURIComponent(this.walletSlot)}`
   }
 }
 
@@ -270,8 +270,9 @@ function describeData (data) {
 }
 
 const instanceId = getInstanceId()
+const walletSlot = getWalletSlot()
 window.__zapcastInitialInstanceId = instanceId
-window.zapCastApp = new ApiClient(instanceId)
+window.zapCastApp = new ApiClient(instanceId, walletSlot)
 
 if (typeof Pear !== 'undefined' && location.protocol === 'file:') {
   setInterval(async () => {
@@ -309,6 +310,15 @@ function getInstanceId () {
   url.searchParams.set('instance', instanceId)
   history.replaceState(null, '', url)
   return instanceId
+}
+
+function getWalletSlot () {
+  const url = new URL(location.href)
+  const requested = Number(url.searchParams.get('walletSlot') || 1)
+  const walletSlot = Number.isInteger(requested) && requested > 0 ? requested : 1
+  url.searchParams.set('walletSlot', String(walletSlot))
+  history.replaceState(null, '', url)
+  return walletSlot
 }
 
 async function devReloadStamp () {

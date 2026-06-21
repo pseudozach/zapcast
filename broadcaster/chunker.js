@@ -26,8 +26,8 @@ export class FfmpegChunker {
     const fs = await fsPromises()
     const { spawn } = await subprocess()
     const outputDirectory = joinPath(this.chunkDirectory, streamId)
+    await fs.rm(outputDirectory, { recursive: true, force: true }).catch(() => {})
     await fs.mkdir(outputDirectory, { recursive: true })
-    await fs.rm(joinPath(outputDirectory, 'chunk-stream.m3u8'), { force: true }).catch(() => {})
 
     const args = buildFfmpegArgs({
       input,

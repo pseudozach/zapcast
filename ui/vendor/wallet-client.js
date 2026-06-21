@@ -19374,10 +19374,24 @@ function getCoder(wordlist11) {
   });
   return utils.chain(utils.checksum(1, calcChecksum), utils.radix2(11, true), utils.alphabet(wordlist11));
 }
+function mnemonicToEntropy(mnemonic, wordlist11) {
+  const { words } = normalize(mnemonic);
+  const entropy = getCoder(wordlist11).decode(words);
+  aentropy(entropy);
+  return entropy;
+}
 function entropyToMnemonic(entropy, wordlist11) {
   aentropy(entropy);
   const words = getCoder(wordlist11).encode(entropy);
   return words.join(isJapanese(wordlist11) ? "\u3000" : " ");
+}
+function validateMnemonic(mnemonic, wordlist11) {
+  try {
+    mnemonicToEntropy(mnemonic, wordlist11);
+  } catch (e) {
+    return false;
+  }
+  return true;
 }
 var psalt = (passphrase) => nfkd("mnemonic" + passphrase);
 function mnemonicToSeedSync(mnemonic, passphrase = "") {
@@ -40049,7 +40063,7 @@ var wordlist10 = `\u7684
 \u6B47`.split("\n");
 
 // ui/wallet-client.js
-var ARC_RPC_PROXY = "http://127.0.0.1:43741/arc-rpc";
+var ARC_RPC_PROXY = "/api/arc-rpc";
 var ARC_EXPLORER_URL = "https://testnet.arcscan.app";
 var zapcastArcTestnet = {
   id: 5042002,
@@ -40078,6 +40092,16 @@ function generateWallet() {
   const account = mnemonicToAccount(mnemonic);
   return {
     mnemonic,
+    address: account.address
+  };
+}
+function walletFromMnemonic(mnemonic) {
+  const normalized = String(mnemonic || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!normalized) throw new Error("Wallet mnemonic is required.");
+  if (!validateMnemonic(normalized, wordlist2)) throw new Error("Enter a valid BIP-39 mnemonic.");
+  const account = mnemonicToAccount(normalized);
+  return {
+    mnemonic: normalized,
     address: account.address
   };
 }
@@ -40112,5 +40136,6 @@ async function getNativeUsdcBalance({ address }) {
 export {
   generateWallet,
   getNativeUsdcBalance,
-  sendNativeUsdc
+  sendNativeUsdc,
+  walletFromMnemonic
 };

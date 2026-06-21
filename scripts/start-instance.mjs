@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { appendFile, mkdir, unlink } from 'node:fs/promises'
@@ -9,11 +10,13 @@ import { postJson } from '../utils/http-json.js'
 const PORT = 43741
 const PREFIX = '[zapcast-launcher]'
 const COMMANDS_FILE = join(process.cwd(), 'tmp', 'window-commands.jsonl')
+const PEAR_EXECUTABLE = resolvePearExecutable()
 const ARC_RPC_URLS = [
   'https://rpc.quicknode.testnet.arc.network',
   'https://rpc.blockdaemon.testnet.arc.network',
   'https://rpc.testnet.arc.network'
 ]
+let nextWalletSlot = 2
 
 log(`starting from ${process.cwd()}`)
 
@@ -28,7 +31,11 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.url === '/open') {
-    const command = { type: 'open-window', instanceId: randomBytes(6).toString('hex') }
+    const command = {
+      type: 'open-window',
+      instanceId: randomBytes(6).toString('hex'),
+      walletSlot: nextWalletSlot++
+    }
     queueWindowCommand(command).then(() => {
       sendJson(res, 200, { ok: true, instanceId: command.instanceId })
     }, err => {
@@ -76,8 +83,8 @@ server.listen(PORT, '127.0.0.1', () => {
 
 async function startPear () {
   await buildWalletClient()
-  log('spawning: pear run --dev .')
-  const child = spawn('pear', ['run', '--dev', '.'], {
+  log(`spawning: ${PEAR_EXECUTABLE} run --dev .`)
+  const child = spawn(PEAR_EXECUTABLE, ['run', '--dev', '.'], {
     cwd: process.cwd(),
     stdio: 'inherit'
   })
@@ -95,6 +102,14 @@ async function startPear () {
       process.exitCode = code ?? 0
     })
   })
+}
+
+function resolvePearExecutable () {
+  if (process.env.PEAR_EXECUTABLE) return process.env.PEAR_EXECUTABLE
+
+  const home = process.env.HOME
+  const installedPear = home && join(home, 'Library', 'Application Support', 'pear', 'bin', 'pear')
+  return installedPear && existsSync(installedPear) ? installedPear : 'pear'
 }
 
 async function buildWalletClient () {
@@ -130,7 +145,7 @@ function sendJson (res, statusCode, payload) {
 async function queueWindowCommand (command) {
   await mkdir(dirname(COMMANDS_FILE), { recursive: true })
   await appendFile(COMMANDS_FILE, `${JSON.stringify(command)}\n`)
-  log(`queued new window request for instance ${command.instanceId} in ${COMMANDS_FILE}`)
+  log(`queued window ${command.instanceId} with wallet slot ${command.walletSlot}`)
 }
 
 async function readJson (req) {

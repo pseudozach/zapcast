@@ -1,7 +1,8 @@
 import { createPublicClient, createWalletClient, formatUnits, http, parseUnits } from 'viem'
 import { english, generateMnemonic, mnemonicToAccount } from 'viem/accounts'
+import { validateMnemonic } from '@scure/bip39'
 
-const ARC_RPC_PROXY = 'http://127.0.0.1:43741/arc-rpc'
+const ARC_RPC_PROXY = '/api/arc-rpc'
 const ARC_EXPLORER_URL = 'https://testnet.arcscan.app'
 const zapcastArcTestnet = {
   id: 5042002,
@@ -31,6 +32,17 @@ export function generateWallet () {
   const account = mnemonicToAccount(mnemonic)
   return {
     mnemonic,
+    address: account.address
+  }
+}
+
+export function walletFromMnemonic (mnemonic) {
+  const normalized = String(mnemonic || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!normalized) throw new Error('Wallet mnemonic is required.')
+  if (!validateMnemonic(normalized, english)) throw new Error('Enter a valid BIP-39 mnemonic.')
+  const account = mnemonicToAccount(normalized)
+  return {
+    mnemonic: normalized,
     address: account.address
   }
 }

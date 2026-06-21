@@ -7,6 +7,7 @@ let mse = null
 let selectedVideoPath = ''
 let walletBalance = null
 let balanceRefreshing = false
+let loadedWalletMnemonic = ''
 const pendingRecords = []
 const playbackUi = {
   recordsSeen: 0,
@@ -23,12 +24,11 @@ ensureViewerControls()
 ensureCopyButtons()
 bindActions()
 bindFileInputs()
-app.ready?.then(() => ensureWallet()).then(() => render()).catch(err => {
+app.ready?.then(() => ensureWallet()).then(() => refreshWalletBalance({ silent: true })).then(() => render()).catch(err => {
   console.error('ZapCast initial load failed', err)
 })
 setInterval(render, 1000)
 setInterval(reportPlaybackState, 1000)
-setInterval(() => refreshWalletBalance({ silent: true }).catch(() => {}), 30000)
 
 app.on('metrics', render)
 app.on('event', render)
@@ -64,12 +64,27 @@ function bindActions () {
   onClick('revealWallet', async () => run(async () => revealWalletSecret()))
   onClick('refreshBalance', async () => run(async () => refreshWalletBalance()))
   onClick('savePaymentSettings', async () => run(async () => withSavedBusy('savePaymentSettings', 'Saving...', 'Saved', async () => {
+    const mnemonic = $('walletSecret').value.trim()
+    let importedMnemonic = ''
+    if (mnemonic) {
+      const candidate = await walletFromMnemonic(mnemonic)
+      if (candidate.mnemonic !== loadedWalletMnemonic) {
+        const imported = await app.importWallet(candidate)
+        importedMnemonic = imported.mnemonic
+        loadedWalletMnemonic = imported.mnemonic
+        walletBalance = null
+        renderBalance()
+      }
+    }
     const wallet = await app.updatePaymentSettings({
       forwardingAddress: $('forwardingAddress').value.trim(),
       forwardThreshold: $('forwardThreshold').value.trim()
     })
     renderWallet(wallet)
-    await refreshWalletBalance({ silent: true }).catch(() => {})
+    setWalletSecretField(loadedWalletMnemonic)
+    if (importedMnemonic) {
+      await refreshWalletBalance({ silent: true })
+    }
   })))
   onClick('tipBroadcaster', async () => run(async () => withBusy('tipBroadcaster', 'Sending...', async () => {
     const amount = $('tipAmount').value.trim()
@@ -261,7 +276,9 @@ function updateViewingButtons (status) {
   const viewing = status.metrics.role === 'viewer' && ['buffering', 'playing'].includes(status.metrics.playbackState)
   if (join && !join.classList.contains('busy')) join.disabled = viewing
   if (stop) stop.disabled = !viewing
-  if (tip && !tip.classList.contains('busy')) tip.disabled = !broadcasterPaymentAddress()
+  if (tip && !tip.classList.contains('busy')) {
+    tip.disabled = !broadcasterPaymentAddress() || !hasSpendableBalance()
+  }
 }
 
 async function withBusy (id, label, fn) {
@@ -394,14 +411,14 @@ async function ensureWallet () {
   const existing = await app.wallet()
   if (existing.address) {
     renderWallet(existing)
-    await refreshWalletBalance({ silent: true }).catch(() => {})
+    await loadWalletSecret()
     return existing
   }
 
   const generated = await generateViemWallet()
-  const imported = await app.importWallet(generated)
+  const imported = await app.importWallet({ ...generated, createIfEmpty: true })
   renderWallet(imported)
-  await refreshWalletBalance({ silent: true }).catch(() => {})
+  setWalletSecretField(imported.mnemonic)
   return imported
 }
 
@@ -420,6 +437,7 @@ async function refreshWalletBalance ({ silent = false } = {}) {
   } finally {
     balanceRefreshing = false
     renderBalance()
+    updateViewingButtons(app.status())
   }
 }
 
@@ -533,20 +551,46 @@ async function copyButtonText (id, text) {
 }
 
 async function revealWalletSecret () {
-  const wallet = await app.revealWallet()
   const input = $('walletSecret')
   const button = $('revealWallet')
   if (!input || !button) return
   const revealing = input.type === 'password'
+  if (revealing && !input.value) {
+    await loadWalletSecret()
+  }
   input.type = revealing ? 'text' : 'password'
-  input.value = revealing ? wallet.mnemonic : 'Hidden'
   button.title = revealing ? 'Hide wallet secret' : 'Reveal wallet secret'
   button.setAttribute('aria-label', button.title)
+}
+
+function setWalletSecretField (mnemonic) {
+  const input = $('walletSecret')
+  const button = $('revealWallet')
+  if (input) {
+    input.type = 'password'
+    input.value = mnemonic || ''
+  }
+  if (button) {
+    button.title = 'Reveal wallet secret'
+    button.setAttribute('aria-label', button.title)
+  }
+}
+
+async function loadWalletSecret () {
+  const wallet = await app.revealWallet()
+  loadedWalletMnemonic = wallet.mnemonic || ''
+  setWalletSecretField(loadedWalletMnemonic)
+  return loadedWalletMnemonic
 }
 
 async function generateViemWallet () {
   const walletClient = await import('./vendor/wallet-client.js')
   return walletClient.generateWallet()
+}
+
+async function walletFromMnemonic (mnemonic) {
+  const walletClient = await import('./vendor/wallet-client.js')
+  return walletClient.walletFromMnemonic(mnemonic)
 }
 
 async function sendTip ({ amount, to }) {
@@ -580,6 +624,11 @@ function broadcasterPaymentAddress () {
 function walletAddress () {
   const status = app.status()
   return status.wallet?.address || status.metrics.wallet?.address || ''
+}
+
+function hasSpendableBalance () {
+  const balance = Number(walletBalance?.formatted)
+  return Number.isFinite(balance) && balance > 0
 }
 
 function formatBalance (value) {

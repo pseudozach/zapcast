@@ -9,6 +9,7 @@ export class IngestPipeline {
     this.chunkDirectory = chunkDirectory
     this.chunker = new FfmpegChunker({ chunkDirectory, logger, metrics })
     this.watcher = null
+    this.appendQueue = Promise.resolve()
   }
 
   async start ({ input, mode, streamId }) {
@@ -19,8 +20,8 @@ export class IngestPipeline {
       logger: this.logger,
       metrics: this.metrics
     })
-    this.watcher.on('chunk', async record => {
-      try {
+    this.watcher.on('chunk', record => {
+      this.appendQueue = this.appendQueue.then(async () => {
         await this.streamFeed.append(record)
         this.metrics?.increment('chunksAppended')
         this.metrics?.set({ latestSequence: record.meta.seq })
@@ -30,9 +31,9 @@ export class IngestPipeline {
           seq: record.meta.seq,
           bytes: record.meta.byteLength
         })
-      } catch (err) {
+      }).catch(err => {
         this.metrics?.recordError(err)
-      }
+      })
     })
     this.watcher.on('error', err => this.metrics?.recordError(err))
     this.watcher.start()

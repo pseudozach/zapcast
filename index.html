@@ -53,7 +53,6 @@
                 <button type="button" id="startIngest">Start Streaming</button>
                 <button type="button" id="stopIngest" class="danger" disabled>Stop Streaming</button>
               </div>
-              <p class="hint">RTMP is primary. Use a local file only when testing without RTMP.</p>
             </form>
             <div class="panel">
               <h2>Stream</h2>
@@ -84,7 +83,7 @@
               </div>
               <video id="video" controls autoplay muted playsinline></video>
               <div class="tip-row">
-                <label>Tip amount <input id="tipAmount" inputmode="decimal" placeholder="0.1"></label>
+                <label>Tip amount <input id="tipAmount" inputmode="decimal" value="1"></label>
                 <button type="button" id="tipBroadcaster" class="secondary">Tip Broadcaster</button>
               </div>
               <div id="tipStatus" class="field-status"></div>
@@ -106,7 +105,7 @@
               <div id="walletDetails" class="metrics"></div>
               <label>Wallet secret
                 <div class="secret-row">
-                  <input id="walletSecret" type="password" readonly value="Hidden">
+                  <input id="walletSecret" type="password" autocomplete="off">
                   <button type="button" id="revealWallet" class="icon-button" title="Reveal wallet secret" aria-label="Reveal wallet secret">👁</button>
                 </div>
               </label>
