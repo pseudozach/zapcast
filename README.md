@@ -17,12 +17,9 @@ ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. OBS
 - Track broadcaster/viewer metrics, payment settings, and export JSON/CSV debug reports.
 - Clean per-instance temporary stream data on app shutdown.
 
-## Requirements
+## Development
 
-- Pear CLI
-- Node.js for local checks
-- `ffmpeg` on `PATH`
-- `ffplay` on `PATH` if you want to use the external fallback player
+Development requires Node.js 22+, the Pear CLI, and `ffmpeg` on `PATH` for broadcaster ingest. Viewers do not need `ffmpeg`.
 
 Install dependencies:
 
@@ -34,6 +31,12 @@ Run in Pear dev mode:
 
 ```sh
 npm start
+```
+
+Run the standalone Electron host used by packaged builds:
+
+```sh
+npm run start:desktop
 ```
 
 If `npm start` prints PHP PEAR package-manager commands, the wrong `pear` binary is first on `PATH`. Install or prioritize the Holepunch Pear CLI before running the desktop app.
@@ -77,7 +80,7 @@ Optional forwarding settings:
 - `Forwarding address`: your main wallet address.
 - `Auto-forward threshold`: when the app wallet balance is at or above this USDC amount, ZapCast forwards the spendable balance and records the transfer in `data/wallet/transfers.csv`.
 
-Persistent wallets are stored under `data/wallet/<instance-id>/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes.
+Persistent wallets are stored by wallet slot under `data/wallet/slots/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes. Packaged builds place these directories in the operating system's ZapCast application-data directory, not beside the installed executable.
 
 ## Relay Proof Setup
 
@@ -87,7 +90,7 @@ To prove:
 Broadcaster -> Viewer A -> Viewer B
 ```
 
-Use the `Settings` and `Debug Stats` tabs:
+Use the `Settings` and `Stats` tabs:
 
 1. On Viewer B, enable `Deny direct broadcaster` in `Settings`.
 2. Add the broadcaster peer ID to `Block peer` if you want an explicit block.
@@ -118,24 +121,44 @@ Use separate app windows/processes for relay testing. Streaming and viewing insi
 - errors
 - event log
 
-`Export CSV` downloads the event log with:
-
-```csv
-timestamp,event,role,peerId,streamId,seq,bytes,sourcePeerId,targetPeerId,message
-```
-
-## Development
-
 Run syntax checks:
 
 ```sh
 npm run check
 ```
 
+## Desktop Distributables
+
+Build an installer/archive for the current operating system:
+
+```sh
+npm ci
+npm run make
+```
+
+Artifacts are written under `out/make/`:
+
+- macOS: DMG and ZIP
+- Windows: `ZapCastSetup.exe` and portable ZIP
+- Linux: AppImage
+
+Forge makers are host-specific, so a Mac does not produce the Windows or Linux packages. The `Build desktop releases` GitHub Actions workflow builds macOS arm64/x64, Windows x64, and Linux x64. Run it manually from the Actions page, or push a version tag such as `v0.1.0`; tag builds also attach all artifacts to a GitHub Release.
+
+These builds are intentionally unsigned:
+
+- macOS users may need to right-click ZapCast and select **Open**. If quarantine still blocks it, run `xattr -dr com.apple.quarantine /Applications/ZapCast.app`. Apple notarization is not possible without an Apple Developer account.
+- Windows users can run `ZapCastSetup.exe` or use the portable ZIP. SmartScreen may warn about an unknown publisher because the executable is unsigned.
+- Linux users should run `chmod +x ZapCast-*.AppImage`. Systems without FUSE can launch it with `--appimage-extract-and-run`.
+
+Broadcasters must install `ffmpeg` separately and make it available on `PATH`. It is not bundled. The packaged app otherwise includes Electron and its Node dependencies and does not require Pear or Node.js on the user's machine.
+
+The package configuration follows the [Pear desktop distributables guide](https://docs.pears.com/how-to/operate-an-app/build-and-package/build-desktop-distributables/) and [Electron Forge makers](https://www.electronforge.io/config/makers/).
+
 Project layout follows the MVP prompt:
 
 ```text
-index.html    single Pear UI entrypoint
+index.html    shared Pear/Electron UI entrypoint
+electron/     standalone packaged desktop host
 src/          app controller and config
 ui/           browser-side JS and CSS used by index.html
 broadcaster/  ffmpeg ingest and chunk watcher

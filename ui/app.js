@@ -1,5 +1,4 @@
 import { MsePlayer } from '../player/mse-player.js'
-import ui from 'pear-electron'
 
 const app = window.zapCastApp
 const $ = id => document.getElementById(id)
@@ -218,7 +217,11 @@ async function selectVideoFile (file) {
 
 async function getFilePath (file) {
   if (!file) return ''
-  if (ui?.media?.getPathForFile) return ui.media.getPathForFile(file)
+  if (window.zapcastDesktop?.getPathForFile) return window.zapcastDesktop.getPathForFile(file)
+  if (typeof Pear !== 'undefined') {
+    const { default: ui } = await import('pear-electron')
+    if (ui?.media?.getPathForFile) return ui.media.getPathForFile(file)
+  }
   if (file.path) return file.path
   return ''
 }

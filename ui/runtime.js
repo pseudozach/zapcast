@@ -1,5 +1,3 @@
-import ui from 'pear-electron'
-
 class ApiClient {
   constructor (instanceId, walletSlot) {
     this.instanceId = instanceId
@@ -211,6 +209,7 @@ class ApiClient {
       for (const command of commands) {
         if (command.type !== 'open-window') continue
         console.info(`ZapCast opening secondary window for instance ${command.instanceId}`)
+        const { default: ui } = await import('pear-electron')
         const win = new ui.Window(`./index.html?instance=${encodeURIComponent(command.instanceId)}&walletSlot=${encodeURIComponent(command.walletSlot)}`, {
           width: 1180,
           height: 820,

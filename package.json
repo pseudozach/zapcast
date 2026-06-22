@@ -1,7 +1,10 @@
 {
   "name": "zapcast",
+  "productName": "ZapCast",
   "version": "0.1.0",
   "description": "Viewer-funded peer-to-peer live streaming MVP for Pear.",
+  "author": "ZapCast contributors",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "src/main.js",
   "pear": {
@@ -24,8 +27,12 @@
   "scripts": {
     "postinstall": "node scripts/patch-pear-electron.mjs",
     "build:wallet": "node scripts/build-wallet-client.mjs",
+    "build:icons": "node scripts/generate-icons.mjs",
     "start": "node scripts/start-instance.mjs",
-    "check": "node --check src/main.js && node --check src/app-controller.js && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/vendor/wallet-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check utils/http-json.js && node --check scripts/start-instance.mjs && node --check scripts/build-wallet-client.mjs",
+    "start:desktop": "npm run build:wallet && npm run build:icons && node scripts/start-desktop.mjs",
+    "package": "npm run build:wallet && npm run build:icons && electron-forge package",
+    "make": "npm run build:wallet && npm run build:icons && electron-forge make",
+    "check": "node --check src/main.js && node --check src/app-controller.js && node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/server.mjs && node --check forge.config.cjs && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/vendor/wallet-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check utils/http-json.js && node --check scripts/start-instance.mjs && node --check scripts/start-desktop.mjs && node --check scripts/build-wallet-client.mjs && node --check scripts/generate-icons.mjs",
     "dev:node": "node src/main.js --role broadcaster"
   },
   "dependencies": {
@@ -46,7 +53,13 @@
     "viem": "^2.52.2"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "electron": "^40.2.1",
     "esbuild": "^0.28.1",
+    "pear-electron-forge-maker-appimage": "^2.0.0",
     "pear-interface": "^1.0.0"
   }
 }
