@@ -135,7 +135,11 @@ export class PeerControl extends SimpleEmitter {
   }
 
   refreshPeerMetrics () {
-    const peers = [...this.peers.values()]
+    const controlPeers = [...this.peers.values()].map(peer => ({ ...peer, source: peer.source || 'control' }))
+    const controlPeerIds = new Set(controlPeers.map(peer => peer.peerId))
+    const dataPeers = (this.metrics?.snapshot?.().connectedPeers || [])
+      .filter(peer => peer.source === 'data' && !controlPeerIds.has(peer.peerId))
+    const peers = [...controlPeers, ...dataPeers]
     this.metrics?.set({
       connectedPeers: peers,
       connectedToBroadcaster: peers.some(peer => peer.role === 'broadcaster'),

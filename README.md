@@ -99,6 +99,7 @@ Optional forwarding settings:
 
 - `Forwarding address`: your main wallet address.
 - `Auto-forward threshold`: when the app wallet balance is at or above this USDC amount, ZapCast forwards the spendable balance and records the transfer in `data/wallet/transfers.csv`.
+- `Lightning address`: optional `name@domain` address advertised with broadcaster metadata. Viewers see it below the video with a copy button and QR code so they can send sats outside the Arc tip flow.
 
 Persistent wallets are stored by wallet slot under `data/wallet/slots/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes. Packaged builds place these directories in the operating system's ZapCast application-data directory, not beside the installed executable.
 

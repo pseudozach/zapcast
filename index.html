@@ -100,6 +100,16 @@
                 <button type="button" id="stopViewing" class="secondary">Stop Viewing</button>
               </div>
               <video id="video" controls autoplay muted playsinline></video>
+              <div id="lightningReceive" class="lightning-card" hidden>
+                <div>
+                  <strong>Lightning address</strong>
+                  <div class="copy-field">
+                    <input id="viewerLightningAddress" readonly>
+                    <button type="button" id="copyLightningAddress" class="secondary">Copy</button>
+                  </div>
+                </div>
+                <img id="lightningQr" alt="Lightning address QR code">
+              </div>
               <div class="tip-row">
                 <label>Tip amount <input id="tipAmount" inputmode="decimal" value="1"></label>
                 <button type="button" id="tipBroadcaster" class="secondary">Tip Broadcaster</button>
@@ -128,6 +138,7 @@
                 </div>
               </label>
               <label>Forwarding address <input id="forwardingAddress" placeholder="0x..."></label>
+              <label>Lightning address <input id="lightningAddress" placeholder="name@example.com"></label>
               <label>Auto-forward threshold <input id="forwardThreshold" inputmode="decimal" placeholder="0.1"></label>
               <div class="actions">
                 <button type="button" id="savePaymentSettings">Save Payment Settings</button>
@@ -161,11 +172,11 @@
               <label>Max broadcaster connections <input id="maxBroadcasterConnections" type="number" min="0"></label>
               <button type="button" id="applyTopology">Apply</button>
             </div>
-          </div>
-          <div class="panel narrow">
-            <h2>Export Reports</h2>
-            <button id="exportJson">Export JSON</button>
-            <pre id="reportOutput"></pre>
+            <div class="panel">
+              <h2>Export Reports</h2>
+              <button id="exportJson">Export JSON</button>
+              <pre id="reportOutput"></pre>
+            </div>
           </div>
         </section>
 

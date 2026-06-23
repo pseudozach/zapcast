@@ -186,7 +186,7 @@ export class PaymentWallet {
     return this.snapshot({ includeSecret: true })
   }
 
-  async updateSettings ({ forwardingAddress, forwardThreshold } = {}) {
+  async updateSettings ({ forwardingAddress, forwardThreshold, lightningAddress } = {}) {
     await this.ready()
     const patch = {}
     if (forwardingAddress !== undefined) {
@@ -198,6 +198,11 @@ export class PaymentWallet {
       const threshold = String(forwardThreshold || '').trim()
       if (!threshold || Number(threshold) < 0) throw new Error('Forward threshold must be zero or higher.')
       patch.forwardThreshold = threshold
+    }
+    if (lightningAddress !== undefined) {
+      const trimmed = String(lightningAddress || '').trim()
+      if (trimmed && !isLightningAddress(trimmed)) throw new Error('Lightning address must look like name@domain.')
+      patch.lightningAddress = trimmed
     }
     Object.assign(this.wallet, patch, { updatedAt: new Date().toISOString() })
     await this.writeWallet()
@@ -268,6 +273,7 @@ export class PaymentWallet {
       asset: this.wallet.asset,
       forwardingAddress: this.wallet.forwardingAddress,
       forwardThreshold: this.wallet.forwardThreshold,
+      lightningAddress: this.wallet.lightningAddress,
       transfersFile: joinPath(this.directory, TRANSFERS_FILE),
       explorerBaseUrl: ARC_EXPLORER_URL
     }
@@ -280,6 +286,7 @@ function normalizeWallet (wallet) {
     address: wallet.address || '',
     forwardingAddress: wallet.forwardingAddress || '',
     forwardThreshold: wallet.forwardThreshold || '0.1',
+    lightningAddress: wallet.lightningAddress || '',
     network: wallet.network || 'arc-testnet',
     asset: wallet.asset || 'USDC',
     createdAt: wallet.createdAt || '',
@@ -300,6 +307,7 @@ function emptyWallet () {
     asset: 'USDC',
     forwardingAddress: '',
     forwardThreshold: '0.1',
+    lightningAddress: '',
     transfersFile: '',
     explorerBaseUrl: ARC_EXPLORER_URL
   }
@@ -307,6 +315,10 @@ function emptyWallet () {
 
 function isEvmAddress (value) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(value || ''))
+}
+
+function isLightningAddress (value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''))
 }
 
 function explorerTxUrl (hash) {

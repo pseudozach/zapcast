@@ -113,7 +113,7 @@ function resolvePearExecutable () {
 }
 
 async function buildBrowserClients () {
-  log('building browser wallet and Nostr bundles')
+  log('building browser wallet, Nostr, and QR bundles')
   const common = {
     bundle: true,
     format: 'esm',
@@ -132,6 +132,11 @@ async function buildBrowserClients () {
     ...common,
     entryPoints: ['ui/nostr-client.js'],
     outfile: 'ui/vendor/nostr-client.js'
+  })
+  await build({
+    ...common,
+    entryPoints: ['ui/qr-client.js'],
+    outfile: 'ui/vendor/qr-client.js'
   })
 }
 

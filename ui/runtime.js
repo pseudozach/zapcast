@@ -128,7 +128,7 @@ class ApiClient {
         ...this.status().metrics,
         wallet,
         payment: wallet.address
-          ? { type: 'arc-testnet', chain: 'arc-testnet', asset: wallet.asset, address: wallet.address }
+          ? { type: 'arc-testnet', chain: 'arc-testnet', asset: wallet.asset, address: wallet.address, lightningAddress: wallet.lightningAddress || '' }
           : this.status().metrics.payment
       }
     }

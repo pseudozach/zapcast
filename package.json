@@ -1,7 +1,7 @@
 {
   "name": "zapcast",
   "productName": "ZapCast",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Viewer-funded peer-to-peer live streaming MVP for Pear.",
   "author": "ZapCast contributors",
   "license": "MIT",
@@ -32,7 +32,7 @@
     "start:desktop": "npm run build:wallet && npm run build:icons && node scripts/start-desktop.mjs",
     "package": "npm run build:wallet && npm run build:icons && electron-forge package",
     "make": "npm run build:wallet && npm run build:icons && electron-forge make",
-    "check": "node --check src/main.js && node --check src/app-controller.js && node --check src/nostr/keys.js && node --check src/nostr/event-builder.js && node --check src/nostr/relays.js && node --check src/nostr/parser.js && node --check src/nostr/discovery.js && node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/server.mjs && node --check forge.config.cjs && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/nostr-client.js && node --check ui/vendor/wallet-client.js && node --check ui/vendor/nostr-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check utils/http-json.js && node --check scripts/start-instance.mjs && node --check scripts/start-desktop.mjs && node --check scripts/build-wallet-client.mjs && node --check scripts/generate-icons.mjs",
+    "check": "node --check src/main.js && node --check src/app-controller.js && node --check src/nostr/keys.js && node --check src/nostr/event-builder.js && node --check src/nostr/relays.js && node --check src/nostr/parser.js && node --check src/nostr/discovery.js && node --check electron/main.cjs && node --check electron/preload.cjs && node --check electron/server.mjs && node --check forge.config.cjs && node --check ui/runtime.js && node --check ui/app.js && node --check ui/wallet-client.js && node --check ui/nostr-client.js && node --check ui/qr-client.js && node --check ui/vendor/wallet-client.js && node --check ui/vendor/nostr-client.js && node --check ui/vendor/qr-client.js && node --check broadcaster/ingest.js && node --check broadcaster/chunker.js && node --check broadcaster/chunk-watcher.js && node --check p2p/swarm.js && node --check p2p/stream-feed.js && node --check p2p/replication.js && node --check p2p/peer-control.js && node --check payments/wallet.js && node --check reports/report.js && node --check utils/cleanup.js && node --check utils/http-json.js && node --check scripts/start-instance.mjs && node --check scripts/start-desktop.mjs && node --check scripts/build-wallet-client.mjs && node --check scripts/generate-icons.mjs",
     "dev:node": "node src/main.js --role broadcaster",
     "test": "node --test test/*.test.js"
   },
@@ -52,6 +52,7 @@
     "pear-bridge": "^1.2.5",
     "pear-electron": "1.7.28",
     "protomux": "^3.10.1",
+    "qrcode": "^1.5.4",
     "viem": "^2.52.2"
   },
   "devDependencies": {

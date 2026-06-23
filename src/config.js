@@ -1,7 +1,7 @@
 import { joinPath, resolvePath } from '../utils/platform.js'
 
 export const APP_NAME = 'ZapCast'
-export const APP_VERSION = '0.1.0'
+export const APP_VERSION = '0.2.3'
 export const DOMAIN = 'zapcast.live'
 
 export const DEFAULTS = Object.freeze({

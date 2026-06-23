@@ -349,7 +349,10 @@ export class ZapCastApp extends SimpleEmitter {
     const imported = await this.wallet.importWallet(wallet)
     this.walletError = ''
     const payment = this.paymentMetadata()
-    if (this.control) this.control.payment = payment
+    if (this.control) {
+      this.control.payment = payment
+      this.control.broadcast('have')
+    }
     this.metrics.set({ wallet: this.wallet.snapshot(), payment })
     return imported
   }
@@ -380,8 +383,12 @@ export class ZapCastApp extends SimpleEmitter {
   async updatePaymentSettings (settings) {
     await this.walletReady
     const wallet = await this.wallet.updateSettings(settings)
-    if (this.control) this.control.payment = this.paymentMetadata()
-    this.metrics.set({ wallet, payment: this.paymentMetadata() })
+    const payment = this.paymentMetadata()
+    if (this.control) {
+      this.control.payment = payment
+      this.control.broadcast('have')
+    }
+    this.metrics.set({ wallet, payment })
     return wallet
   }
 
@@ -429,7 +436,8 @@ export class ZapCastApp extends SimpleEmitter {
       type: 'arc-testnet',
       chain: 'arc-testnet',
       asset: wallet.asset,
-      address: wallet.address
+      address: wallet.address,
+      lightningAddress: wallet.lightningAddress || ''
     }
   }
 

@@ -209,11 +209,26 @@ main {
   color: var(--muted);
 }
 
-.nostr-stream-row small {
-  display: block;
+.nostr-stream-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
   color: var(--muted);
-  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.stream-id-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+}
+
+.inline-copy {
+  min-width: auto;
+  min-height: 24px;
+  padding: 3px 7px;
+  font-size: 12px;
 }
 
 .pagination-row {
@@ -482,6 +497,41 @@ button.danger:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 10px;
+}
+
+.lightning-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9fbfc;
+}
+
+.lightning-card[hidden] {
+  display: none;
+}
+
+.lightning-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.lightning-card img {
+  width: 112px;
+  height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.copy-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .tip-row {

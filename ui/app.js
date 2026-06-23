@@ -12,6 +12,7 @@ let nostrStreams = []
 let nostrPage = 0
 let nostrDiscoveryLoading = false
 let lastNostrAnnouncement = null
+let lightningQrAddress = ''
 const pendingRecords = []
 const playbackUi = {
   recordsSeen: 0,
@@ -65,6 +66,7 @@ function bindActions () {
   onClick('copyAllMetrics', () => copyText(JSON.stringify(app.status().metrics, null, 2)))
   onClick('copyChunkSources', () => copyText(JSON.stringify(app.status().metrics.chunkSources || {}, null, 2)))
   onClick('copyEventLog', () => copyText(eventLogText()))
+  onClick('copyLightningAddress', () => copyButtonText('copyLightningAddress', broadcasterLightningAddress()))
   onClick('revealWallet', async () => run(async () => revealWalletSecret()))
   onClick('refreshBalance', async () => run(async () => refreshWalletBalance()))
   onClick('refreshNostrStreams', async () => run(async () => refreshNostrStreams()))
@@ -88,6 +90,7 @@ function bindActions () {
     }
     const wallet = await app.updatePaymentSettings({
       forwardingAddress: $('forwardingAddress').value.trim(),
+      lightningAddress: $('lightningAddress').value.trim(),
       forwardThreshold: $('forwardThreshold').value.trim()
     })
     renderWallet(wallet)
@@ -278,6 +281,7 @@ function render () {
   if (lastError && !status.ffmpeg.error) {
     $('ffmpegStatus').textContent = `${$('ffmpegStatus').textContent}\n\nLast error: ${lastError.message}`
   }
+  renderLightningReceive(status.metrics.connectedPeers)
   renderPeers(status.metrics.connectedPeers)
   renderSources(status.metrics.chunkSources)
   renderEvents(status.events)
@@ -442,12 +446,20 @@ function renderNostrStreams () {
       <div>
         <strong>${escapeHtml(stream.title)}</strong>
         <p>${escapeHtml(stream.summary || '')}</p>
-        <small>${escapeHtml(stream.npub || short(stream.pubkey))} · ${escapeHtml(formatTime(stream.createdAt))} · ${escapeHtml(shortStreamId(stream.streamId))}</small>
+        <div class="nostr-stream-meta">
+          <span>${escapeHtml(shortNostrKey(stream.npub || stream.pubkey))}</span>
+          <span>${escapeHtml(formatTime(stream.createdAt))}</span>
+          <span class="stream-id-chip">${escapeHtml(shortStreamId(stream.streamId))}</span>
+          <button type="button" class="copy-button inline-copy" data-copy-stream-id="${escapeHtml(stream.streamId)}" title="Copy stream ID" aria-label="Copy stream ID">Copy</button>
+        </div>
       </div>
       ${nostrStreamActionButton(stream)}
     </div>
   `).join('')
 
+  for (const button of container.querySelectorAll('[data-copy-stream-id]')) {
+    button.addEventListener('click', () => copyButtonText(button.id || assignInlineButtonId(button), button.dataset.copyStreamId))
+  }
   for (const button of container.querySelectorAll('[data-watch-stream]')) {
     button.addEventListener('click', () => run(async () => watchDiscoveredStream(button.dataset.watchStream)))
   }
@@ -460,6 +472,33 @@ function nostrStreamActionButton (stream) {
   const mine = stream.pubkey && nostrIdentity?.pubkey && stream.pubkey === nostrIdentity.pubkey
   if (mine) return `<button type="button" class="danger" data-stop-nostr-stream="${escapeHtml(stream.streamId)}">Stop</button>`
   return `<button type="button" class="secondary" data-watch-stream="${escapeHtml(stream.streamId)}">Watch</button>`
+}
+
+async function renderLightningReceive (peers = []) {
+  const card = $('lightningReceive')
+  const input = $('viewerLightningAddress')
+  const qr = $('lightningQr')
+  if (!card || !input || !qr) return
+
+  const address = peers.find(peer => peer.role === 'broadcaster')?.payment?.lightningAddress || ''
+  card.hidden = !address
+  input.value = address
+  if ($('copyLightningAddress')) $('copyLightningAddress').disabled = !address
+  if (!address) {
+    lightningQrAddress = ''
+    qr.removeAttribute('src')
+    return
+  }
+  if (lightningQrAddress === address && qr.getAttribute('src')) return
+
+  lightningQrAddress = address
+  try {
+    const qrClient = await import('./vendor/qr-client.js')
+    qr.src = await qrClient.lightningAddressQrDataUrl(address)
+  } catch (err) {
+    qr.removeAttribute('src')
+    await app.reportError?.(err)
+  }
 }
 
 function renderBalance () {
@@ -505,6 +544,7 @@ function renderWallet (wallet = {}) {
     address: wallet.address || ''
   })
   if ($('forwardingAddress') && document.activeElement !== $('forwardingAddress')) $('forwardingAddress').value = wallet.forwardingAddress || ''
+  if ($('lightningAddress') && document.activeElement !== $('lightningAddress')) $('lightningAddress').value = wallet.lightningAddress || ''
   if ($('forwardThreshold') && document.activeElement !== $('forwardThreshold')) $('forwardThreshold').value = wallet.forwardThreshold || '0.1'
 }
 
@@ -701,6 +741,18 @@ function shortStreamId (value = '') {
   return `${text.slice(0, 5)}...${text.slice(-5)}`
 }
 
+function shortNostrKey (value = '') {
+  const text = String(value)
+  if (!text) return ''
+  if (text.length <= 18) return text
+  return `${text.slice(0, 10)}...${text.slice(-6)}`
+}
+
+function assignInlineButtonId (button) {
+  button.id = `inline-copy-${Math.random().toString(36).slice(2)}`
+  return button.id
+}
+
 function formatTime (unixSeconds) {
   const time = Number(unixSeconds) * 1000
   if (!Number.isFinite(time) || time <= 0) return ''
@@ -869,6 +921,11 @@ async function sendTip ({ amount, to }) {
 function broadcasterPaymentAddress () {
   const peers = app.status().metrics.connectedPeers || []
   return peers.find(peer => peer.role === 'broadcaster')?.payment?.address || ''
+}
+
+function broadcasterLightningAddress () {
+  const peers = app.status().metrics.connectedPeers || []
+  return peers.find(peer => peer.role === 'broadcaster')?.payment?.lightningAddress || ''
 }
 
 function walletAddress () {
