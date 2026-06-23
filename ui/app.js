@@ -1,5 +1,4 @@
 import { MsePlayer } from '../player/mse-player.js'
-import { paginateStreams } from '../src/nostr/discovery.js'
 
 const app = window.zapCastApp
 const $ = id => document.getElementById(id)
@@ -407,6 +406,20 @@ function renderNostrRefreshButton () {
   button.classList.toggle('busy', nostrDiscoveryLoading)
   const label = button.querySelector('.button-label')
   if (label) label.textContent = nostrDiscoveryLoading ? 'Loading Nostr Streams' : 'Refresh Nostr Streams'
+}
+
+function paginateStreams (streams = [], { page = 0, pageSize = 10 } = {}) {
+  const safePageSize = Math.max(1, Number(pageSize) || 10)
+  const safePage = Math.max(0, Number(page) || 0)
+  const start = safePage * safePageSize
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    total: streams.length,
+    items: streams.slice(start, start + safePageSize),
+    hasPrevious: safePage > 0,
+    hasNext: start + safePageSize < streams.length
+  }
 }
 
 function renderNostrStreams () {
