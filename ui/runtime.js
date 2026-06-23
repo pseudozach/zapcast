@@ -145,7 +145,13 @@ class ApiClient {
   }
 
   async reportError (err) {
-    return this.post('/api/error', { message: err?.message || String(err) }).catch(() => {})
+    return this.post('/api/error', {
+      message: err?.message || String(err),
+      stack: err?.stack || '',
+      name: err?.name || '',
+      url: window.location.href,
+      userAgent: navigator.userAgent
+    }).catch(() => {})
   }
 
   async reportPlayback (snapshot) {

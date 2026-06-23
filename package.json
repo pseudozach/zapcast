@@ -1,7 +1,7 @@
 {
   "name": "zapcast",
   "productName": "ZapCast",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Viewer-funded peer-to-peer live streaming MVP for Pear.",
   "author": "ZapCast contributors",
   "license": "MIT",

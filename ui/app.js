@@ -28,9 +28,9 @@ bindTabs()
 ensureViewerControls()
 ensureCopyButtons()
 bindActions()
-app.ready?.then(() => ensureWallet()).then(() => ensureNostrIdentity()).then(() => refreshWalletBalance({ silent: true })).then(() => refreshNostrStreams({ silent: true }).catch(err => console.warn('ZapCast Nostr startup discovery failed', err))).then(() => render()).catch(err => {
-  console.error('ZapCast initial load failed', err)
-})
+setLaunchStatus('boot')
+render()
+runStartup()
 setInterval(render, 1000)
 setInterval(reportPlaybackState, 1000)
 
@@ -210,6 +210,41 @@ function onClick (id, handler) {
 function showTab (id) {
   for (const button of document.querySelectorAll('[data-tab]')) button.classList.toggle('active', button.dataset.tab === id)
   for (const tab of document.querySelectorAll('.tab')) tab.classList.toggle('active', tab.id === id)
+}
+
+async function runStartup () {
+  const failures = []
+  const steps = [
+    ['backend', () => app.ready],
+    ['wallet', () => ensureWallet()],
+    ['nostr key', () => ensureNostrIdentity()],
+    ['balance', () => refreshWalletBalance({ silent: true })],
+    ['nostr live', () => refreshNostrStreams({ silent: true })]
+  ]
+
+  for (const [index, [label, task]] of steps.entries()) {
+    setLaunchStatus(`${index + 1}/${steps.length} ${label}`)
+    await paint()
+    try {
+      await withTimeout(Promise.resolve().then(task), 15000, label)
+    } catch (err) {
+      console.error(`ZapCast startup step failed: ${label}`, err)
+      failures.push(label)
+      app.reportError?.(err).catch(() => {})
+      setLaunchStatus(`${label} failed`)
+      await paint()
+      await delay(900)
+    } finally {
+      render()
+    }
+  }
+
+  if (failures.length) {
+    setLaunchStatus(`ready · ${failures.length} err`, `Failed startup step(s): ${failures.join(', ')}`)
+    console.error(`ZapCast startup completed with failed step(s): ${failures.join(', ')}`)
+  } else {
+    clearLaunchStatus()
+  }
 }
 
 async function run (fn) {
@@ -845,9 +880,38 @@ function delay (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function paint () {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()))
+}
+
+function withTimeout (promise, ms, label) {
+  return Promise.race([
+    promise,
+    delay(ms).then(() => {
+      throw new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)
+    })
+  ])
+}
+
 function setStatus (id, text) {
   const node = $(id)
   if (node) node.textContent = text
+}
+
+function setLaunchStatus (text, title = '') {
+  const node = $('launchStatus')
+  if (!node) return
+  node.hidden = false
+  node.textContent = `Launch: ${text}`
+  node.title = title || node.textContent
+}
+
+function clearLaunchStatus () {
+  const node = $('launchStatus')
+  if (!node) return
+  node.textContent = ''
+  node.title = ''
+  node.hidden = true
 }
 
 function setStatusLink (id, label, href) {

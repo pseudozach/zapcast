@@ -102,6 +102,14 @@ Optional forwarding settings:
 
 Persistent wallets are stored by wallet slot under `data/wallet/slots/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes. Packaged builds place these directories in the operating system's ZapCast application-data directory, not beside the installed executable.
 
+Packaged Electron builds also write a rolling diagnostic log:
+
+- Windows: `%LOCALAPPDATA%\zapcast\logs\zapcast.log`
+- macOS: `~/Library/Application Support/ZapCast/logs/zapcast.log`
+- Linux: `~/.config/ZapCast/logs/zapcast.log`
+
+The previous log is rotated to `zapcast.log.old` when it grows beyond 2 MB.
+
 ## Relay Proof Setup
 
 To prove:

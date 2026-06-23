@@ -106,6 +106,7 @@ async function dispatchApi (app, pathname, body, url) {
     case '/api/export-json': return app.exportJson()
     case '/api/export-csv': return app.exportCsv()
     case '/api/error':
+      console.error('[zapcast-desktop] renderer reported error', body)
       app.metrics.recordError(new Error(body.message || 'Renderer error'))
       return app.status()
     case '/api/playback-report': return app.updatePlaybackReport(body)

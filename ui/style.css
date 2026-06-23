@@ -46,6 +46,7 @@ table,
 .tabs,
 .panel,
 .file-status,
+.launch-pill,
 .balance-pill,
 .peer-pill {
   -webkit-app-region: no-drag;
@@ -99,6 +100,7 @@ h3 {
 }
 
 .peer-pill,
+.launch-pill,
 .balance-pill {
   display: flex;
   align-items: center;
@@ -111,6 +113,17 @@ h3 {
   background: #f9fbfc;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.launch-pill {
+  max-width: 150px;
+  min-width: 92px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.launch-pill[hidden] {
+  display: none;
 }
 
 .balance-pill {
