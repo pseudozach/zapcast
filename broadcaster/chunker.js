@@ -21,7 +21,7 @@ export class FfmpegChunker {
 
   async start ({ input, mode = 'rtmp', streamId }) {
     if (this.process) throw new Error('ffmpeg is already running')
-    if (!input) throw new Error('Missing RTMP URL or video file path')
+    if (!input) throw new Error('Missing source URL or video file path')
 
     const fs = await fsPromises()
     const { spawn } = await subprocess()

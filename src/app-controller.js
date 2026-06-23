@@ -159,9 +159,9 @@ export class ZapCastApp extends SimpleEmitter {
     if (!this.ingest) throw new Error('Create a stream before starting ingest')
     const streamId = this.metrics.snapshot().streamId
     const input = rtmpUrl || videoFile
-    if (!input) throw new Error('Missing RTMP URL or selected video file')
-    if (rtmpUrl) validateRtmpUrl(rtmpUrl)
-    const mode = rtmpUrl ? 'rtmp' : 'file'
+    if (!input) throw new Error('Missing source URL or selected video file')
+    if (rtmpUrl) validateSourceUrl(rtmpUrl)
+    const mode = rtmpUrl ? 'url' : 'file'
     this.eventLog.add('ingest_started', {
       role: 'broadcaster',
       peerId: this.metrics.peerId,
@@ -443,18 +443,22 @@ function normalizeWalletSlot (value) {
   return Number.isInteger(slot) && slot > 0 ? slot : 1
 }
 
-function validateRtmpUrl (value) {
+function validateSourceUrl (value) {
   let url
   try {
     url = new URL(value)
   } catch {
-    throw new Error('RTMP URL must be a valid rtmp:// or rtmps:// URL.')
+    throw new Error('Source URL must be a valid rtmp://, rtmps://, http://, or https:// URL.')
   }
-  if (url.protocol !== 'rtmp:' && url.protocol !== 'rtmps:') {
-    throw new Error('RTMP URL must start with rtmp:// or rtmps://.')
+  const supportedProtocols = new Set(['rtmp:', 'rtmps:', 'http:', 'https:'])
+  if (!supportedProtocols.has(url.protocol)) {
+    throw new Error('Source URL must start with rtmp://, rtmps://, http://, or https://.')
   }
-  if (!url.hostname || url.pathname === '/') {
-    throw new Error('RTMP URL must include a host and stream path, for example rtmp://host/app/key.')
+  if (!url.hostname) {
+    throw new Error('Source URL must include a host.')
+  }
+  if ((url.protocol === 'rtmp:' || url.protocol === 'rtmps:') && url.pathname === '/') {
+    throw new Error('RTMP source URLs must include a stream path, for example rtmp://host/app/key.')
   }
 }
 

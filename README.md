@@ -5,7 +5,7 @@ ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. OBS
 ## What Works
 
 - Create a stream and generate a shareable stream ID.
-- Ingest an RTMP endpoint such as `rtmp://127.0.0.1/live/zapcast`.
+- Ingest an RTMP/HTTP source URL such as `rtmp://127.0.0.1/live/zapcast` or an HTTP stream that `ffmpeg` can open.
 - Use a local video file as a live fallback with `ffmpeg -re`.
 - Append init/chunk records to Hypercore with metadata and SHA-256 hashes.
 - Replicate the feed over Hyperswarm/Corestore.
@@ -51,13 +51,13 @@ source ~/.zshrc
 
 1. Open ZapCast.
 2. Go to `Streamer`.
-3. Enter an RTMP URL, for example `rtmp://127.0.0.1/live/zapcast`.
+3. Enter a source URL, for example `rtmp://127.0.0.1/live/zapcast` or an HTTP/HLS URL that `ffmpeg` can open.
 4. Click `Start Streaming`.
 5. Copy the generated stream ID and share it with viewers.
 
-OBS should publish to the RTMP endpoint you provide. ZapCast does not implement an RTMP server; it expects one to already be running.
+OBS should publish to the RTMP endpoint you provide. ZapCast does not implement an RTMP server; it expects one to already be running. HTTP and HTTPS source URLs are passed directly to `ffmpeg`; they work when `ffmpeg` can open and decode that URL.
 
-When streaming starts, ZapCast generates the stream keypair/feed ID automatically. For fallback testing, select a local video file instead of entering an RTMP URL. ZapCast passes `-re` to `ffmpeg` so the file behaves like a live input.
+When streaming starts, ZapCast generates the stream keypair/feed ID automatically. For fallback testing, select a local video file instead of entering a source URL. ZapCast passes `-re` to `ffmpeg` so the file behaves like a live input.
 
 ## Viewer Workflow
 

@@ -100,7 +100,7 @@ function bindActions () {
       $('streamIdOut').value = stream.streamId
     }
     if (!$('rtmpUrl').value.trim() && !selectedVideoPath) {
-      throw new Error('Choose a local video file, or enter an RTMP URL.')
+      throw new Error('Choose a local video file, or enter a source URL.')
     }
     await app.startIngest({
       rtmpUrl: $('rtmpUrl').value.trim(),
@@ -343,10 +343,12 @@ function rtmpValidationMessage (value) {
   try {
     url = new URL(value)
   } catch {
-    return 'Enter a valid RTMP URL.'
+    return 'Enter a valid source URL.'
   }
-  if (url.protocol !== 'rtmp:' && url.protocol !== 'rtmps:') return 'RTMP URL must start with rtmp:// or rtmps://.'
-  if (!url.hostname || url.pathname === '/') return 'RTMP URL must include a host and stream path.'
+  const supportedProtocols = new Set(['rtmp:', 'rtmps:', 'http:', 'https:'])
+  if (!supportedProtocols.has(url.protocol)) return 'Source URL must start with rtmp://, rtmps://, http://, or https://.'
+  if (!url.hostname) return 'Source URL must include a host.'
+  if ((url.protocol === 'rtmp:' || url.protocol === 'rtmps:') && url.pathname === '/') return 'RTMP source URLs must include a stream path.'
   return ''
 }
 
