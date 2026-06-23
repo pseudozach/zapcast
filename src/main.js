@@ -91,6 +91,14 @@ async function dispatchApi (app, pathname, body, url) {
     }
     case '/api/wallet':
       return app.walletSnapshot()
+    case '/api/nostr':
+      return app.nostrSnapshot()
+    case '/api/reveal-nostr':
+      return app.nostrSnapshot({ includeSecret: true })
+    case '/api/import-nostr':
+      return app.importNostrKey(body)
+    case '/api/nostr-relays':
+      return app.updateNostrRelays(body)
     case '/api/records':
       return app.recordsAfter(Number(url.searchParams.get('after') || -1))
     case '/api/window-commands':

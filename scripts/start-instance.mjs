@@ -82,7 +82,7 @@ server.listen(PORT, '127.0.0.1', () => {
 })
 
 async function startPear () {
-  await buildWalletClient()
+  await buildBrowserClients()
   log(`spawning: ${PEAR_EXECUTABLE} run --dev .`)
   const child = spawn(PEAR_EXECUTABLE, ['run', '--dev', '.'], {
     cwd: process.cwd(),
@@ -112,11 +112,9 @@ function resolvePearExecutable () {
   return installedPear && existsSync(installedPear) ? installedPear : 'pear'
 }
 
-async function buildWalletClient () {
-  log('building browser wallet bundle')
-  await build({
-    entryPoints: ['ui/wallet-client.js'],
-    outfile: 'ui/vendor/wallet-client.js',
+async function buildBrowserClients () {
+  log('building browser wallet and Nostr bundles')
+  const common = {
     bundle: true,
     format: 'esm',
     platform: 'browser',
@@ -124,6 +122,16 @@ async function buildWalletClient () {
     sourcemap: false,
     legalComments: 'none',
     logLevel: 'silent'
+  }
+  await build({
+    ...common,
+    entryPoints: ['ui/wallet-client.js'],
+    outfile: 'ui/vendor/wallet-client.js'
+  })
+  await build({
+    ...common,
+    entryPoints: ['ui/nostr-client.js'],
+    outfile: 'ui/vendor/nostr-client.js'
   })
 }
 

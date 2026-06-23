@@ -95,6 +95,26 @@ class ApiClient {
     return result
   }
 
+  async nostr () {
+    return this.get('/api/nostr')
+  }
+
+  async revealNostr () {
+    return this.post('/api/reveal-nostr')
+  }
+
+  async importNostr (payload) {
+    const identity = await this.post('/api/import-nostr', payload)
+    await this.poll()
+    return identity
+  }
+
+  async updateNostrRelays (payload) {
+    const identity = await this.post('/api/nostr-relays', payload)
+    await this.poll()
+    return identity
+  }
+
   async revealWallet () {
     return this.post('/api/reveal-wallet')
   }
@@ -296,7 +316,8 @@ function emptyStatus () {
     events: [],
     payments: {},
     ffmpeg: { running: false, logs: [] },
-    topology: {}
+    topology: {},
+    nostr: {}
   }
 }
 

@@ -1,12 +1,11 @@
 # ZapCast
 
-ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. OBS or a local video file is ingested by `ffmpeg`, converted into low-latency fMP4 chunks, appended to Hypercore, replicated over Hyperswarm, and replayed by viewers who also relay the feed.
+ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. A source URL is ingested by `ffmpeg`, converted into low-latency fMP4 chunks, appended to Hypercore, replicated over Hyperswarm, and replayed by viewers who also relay the feed.
 
 ## What Works
 
 - Create a stream and generate a shareable stream ID.
 - Ingest an RTMP/HTTP source URL such as `rtmp://127.0.0.1/live/zapcast` or an HTTP stream that `ffmpeg` can open.
-- Use a local video file as a live fallback with `ffmpeg -re`.
 - Append init/chunk records to Hypercore with metadata and SHA-256 hashes.
 - Replicate the feed over Hyperswarm/Corestore.
 - Join as a viewer and receive replicated chunks.
@@ -14,6 +13,7 @@ ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. OBS
 - Exchange debug control messages: `hello`, `have`, `want`, `stats`, and `topology`.
 - Apply allowlist, blocklist, preferred relay, direct broadcaster denial, and broadcaster connection limit controls.
 - Generate a local Arc Testnet wallet, advertise broadcaster payment metadata, and send viewer tips to broadcasters.
+- Announce and discover live ZapCast streams through Nostr NIP-53 kind 30311 events.
 - Track broadcaster/viewer metrics, payment settings, and export JSON/CSV debug reports.
 - Clean per-instance temporary stream data on app shutdown.
 
@@ -57,7 +57,27 @@ source ~/.zshrc
 
 OBS should publish to the RTMP endpoint you provide. ZapCast does not implement an RTMP server; it expects one to already be running. HTTP and HTTPS source URLs are passed directly to `ffmpeg`; they work when `ffmpeg` can open and decode that URL.
 
-When streaming starts, ZapCast generates the stream keypair/feed ID automatically. For fallback testing, select a local video file instead of entering a source URL. ZapCast passes `-re` to `ffmpeg` so the file behaves like a live input.
+When streaming starts, ZapCast generates the stream keypair/feed ID automatically.
+
+## Nostr Discovery
+
+ZapCast uses Nostr for discovery only. Video chunks still move over Hypercore/Hyperswarm; Nostr relays only carry signed live stream announcements that point to existing ZapCast stream IDs.
+
+ZapCast publishes standard NIP-53 live activity events with `kind:30311`. It does not use a custom discovery kind. Each announcement includes NIP-53 tags such as `d`, `title`, `summary`, `status`, and `streaming`, plus ZapCast-specific tags like `["t", "zapcast"]`, `["client", "zapcast"]`, and `["zapcast", <streamId>]` so viewers can filter public relays safely.
+
+Default relays:
+
+- `wss://relay.damus.io`
+- `wss://nos.lol`
+- `wss://relay.primal.net`
+- `wss://relay.snort.social`
+- `wss://nostr.wine`
+
+To announce a stream, create/start a stream in `Streamer`, set the title and description, then click `Announce on Nostr`. When the stream is stopped from the app, ZapCast publishes an updated `kind:30311` event with the same `d` tag and `status=ended`.
+
+Each machine gets a separate local Nostr keypair stored under `data/nostr` in the app data directory. This key is not the Arc wallet key and not the Hypercore/Hyperswarm stream key. In `Settings`, the Nostr Identity card shows the `npub`, lets you copy it, keeps the generated `nsec` hidden behind a reveal button, allows replacing it with an imported `nsec` or 64-character private key, and lets you edit the relay list.
+
+The Home screen queries configured relays for `{ kinds: [30311], "#t": ["zapcast"], limit: 50 }`, filters live ZapCast events client-side, and can auto-fill/join a selected stream.
 
 ## Viewer Workflow
 

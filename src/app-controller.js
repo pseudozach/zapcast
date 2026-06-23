@@ -14,6 +14,7 @@ import { exportCsvEvents, exportJsonReport } from '../reports/report.js'
 import { SimpleEmitter } from '../utils/emitter.js'
 import { joinPath, runtimeArgv } from '../utils/platform.js'
 import { cleanupInstanceData } from '../utils/cleanup.js'
+import { NostrIdentityStore } from './nostr/keys.js'
 
 export class ZapCastApp extends SimpleEmitter {
   constructor (options = {}) {
@@ -43,6 +44,11 @@ export class ZapCastApp extends SimpleEmitter {
     })
     this.walletError = ''
     this.walletReady = this.initWallet()
+    this.nostr = new NostrIdentityStore({
+      directory: DEFAULTS.nostrDirectory,
+      logger: this.eventLog
+    })
+    this.nostrReady = this.nostr.ready()
     this.records = []
     this.startedAt = Date.now()
 
@@ -70,6 +76,25 @@ export class ZapCastApp extends SimpleEmitter {
       ready: Boolean(wallet.address),
       error: this.walletError
     }
+  }
+
+  async nostrSnapshot ({ includeSecret = false } = {}) {
+    await this.nostrReady
+    return this.nostr.snapshot({ includeSecret })
+  }
+
+  async importNostrKey (identity) {
+    await this.nostrReady
+    const next = await this.nostr.importKey(identity)
+    this.metrics.set({ nostr: await this.nostr.snapshot() })
+    return next
+  }
+
+  async updateNostrRelays (settings) {
+    await this.nostrReady
+    const next = await this.nostr.updateRelays(settings)
+    this.metrics.set({ nostr: next })
+    return next
   }
 
   async forwardWalletBalance () {
@@ -155,13 +180,13 @@ export class ZapCastApp extends SimpleEmitter {
     this.metrics.set({ peerId: this.control.peerId, dataPeerId: this.swarm.peerId, controlPeerId: this.control.peerId, streamId, payment: this.paymentMetadata(), wallet: this.wallet.snapshot() })
   }
 
-  async startIngest ({ rtmpUrl, videoFile }) {
+  async startIngest ({ rtmpUrl }) {
     if (!this.ingest) throw new Error('Create a stream before starting ingest')
     const streamId = this.metrics.snapshot().streamId
-    const input = rtmpUrl || videoFile
-    if (!input) throw new Error('Missing source URL or selected video file')
-    if (rtmpUrl) validateSourceUrl(rtmpUrl)
-    const mode = rtmpUrl ? 'url' : 'file'
+    const input = String(rtmpUrl || '').trim()
+    if (!input) throw new Error('Missing source URL')
+    validateSourceUrl(input)
+    const mode = 'url'
     this.eventLog.add('ingest_started', {
       role: 'broadcaster',
       peerId: this.metrics.peerId,
@@ -374,12 +399,14 @@ export class ZapCastApp extends SimpleEmitter {
 
   async status () {
     const wallet = await this.walletSnapshot()
+    const nostr = await this.nostrSnapshot()
     return {
       config: this.configSnapshot(),
       metrics: this.metrics.snapshot(),
       events: this.eventLog.list(),
       payments: this.payments,
       wallet,
+      nostr,
       ffmpeg: this.ingest?.status() || { running: false, logs: [] },
       topology: this.topology.snapshot()
     }

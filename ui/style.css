@@ -100,6 +100,9 @@ h3 {
 
 .peer-pill,
 .balance-pill {
+  display: flex;
+  align-items: center;
+  height: 44px;
   max-width: 280px;
   overflow: hidden;
   padding: 8px 10px;
@@ -111,8 +114,6 @@ h3 {
 }
 
 .balance-pill {
-  display: flex;
-  align-items: center;
   gap: 8px;
   max-width: none;
 }
@@ -170,6 +171,55 @@ main {
   line-height: 1.1;
 }
 
+.nostr-live-panel {
+  margin-top: 18px;
+}
+
+.nostr-streams {
+  display: grid;
+  gap: 10px;
+}
+
+.nostr-stream-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9fbfc;
+}
+
+.nostr-stream-row p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.nostr-stream-row small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.empty-state {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9fbfc;
+  color: var(--muted);
+}
+
 .grid {
   display: grid;
   align-items: start;
@@ -188,8 +238,13 @@ main {
   border-radius: 8px;
 }
 
-.panel + .panel {
+.tab > .panel + .panel {
   margin-top: 18px;
+}
+
+.grid > .panel + .panel,
+.grid > form.panel + .panel {
+  margin-top: 0;
 }
 
 .narrow {
@@ -285,6 +340,22 @@ button:disabled {
   background: #cbd5dc;
   color: #7a8791;
   cursor: not-allowed;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button-icon {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+}
+
+button.busy .button-icon {
+  display: none;
 }
 
 button.busy::before {

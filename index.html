@@ -39,6 +39,19 @@
               <button id="homeJoin" class="secondary">Join Stream</button>
             </div>
           </div>
+          <div class="panel nostr-live-panel">
+            <div class="panel-heading">
+              <h2>Live on Nostr</h2>
+              <button type="button" id="refreshNostrStreams" class="secondary refresh-button"><span class="button-icon" aria-hidden="true">↻</span><span class="button-label">Refresh Nostr Streams</span></button>
+            </div>
+            <div id="nostrDiscoveryStatus" class="field-status">No streams loaded.</div>
+            <div id="nostrStreams" class="nostr-streams"></div>
+            <div class="pagination-row">
+              <button type="button" id="nostrPrev" class="secondary">Previous</button>
+              <span id="nostrPage">Page 1</span>
+              <button type="button" id="nostrNext" class="secondary">Next</button>
+            </div>
+          </div>
         </section>
 
         <section id="streamer" class="tab">
@@ -47,8 +60,6 @@
               <h2>Streamer</h2>
               <label>Source URL <input id="rtmpUrl" placeholder="rtmp://127.0.0.1/live/zapcast or https://host/live/stream.m3u8"></label>
               <div id="rtmpError" class="field-error" hidden></div>
-              <label>Video file fallback <input id="videoFile" type="file" accept="video/*"></label>
-              <div id="selectedVideo" class="file-status">No video selected</div>
               <div class="actions">
                 <button type="button" id="startIngest">Start Streaming</button>
                 <button type="button" id="stopIngest" class="danger" disabled>Stop Streaming</button>
@@ -57,7 +68,13 @@
             <div class="panel">
               <h2>Stream</h2>
               <label>Shareable stream ID <textarea id="streamIdOut" rows="3" readonly placeholder="Generated when streaming starts."></textarea></label>
-              <button type="button" id="copyStreamId" class="secondary" disabled>Copy Stream ID</button>
+              <label>Title <input id="nostrStreamTitle" value="zapcast live stream"></label>
+              <label>Description <textarea id="nostrStreamDescription" rows="3">unstoppable live stream</textarea></label>
+              <div class="actions">
+                <button type="button" id="copyStreamId" class="secondary" disabled>Copy Stream ID</button>
+                <button type="button" id="announceNostr" class="secondary" disabled>Announce on Nostr</button>
+              </div>
+              <div id="nostrPublishStatus" class="field-status"></div>
               <div class="panel-heading section-heading">
                 <h2>Broadcaster Metrics</h2>
                 <button type="button" id="copyBroadcasterMetrics" class="copy-button">Copy</button>
@@ -115,6 +132,24 @@
                 <button type="button" id="savePaymentSettings">Save Payment Settings</button>
               </div>
               <div id="paymentStats" class="metrics"></div>
+            </div>
+            <div class="panel">
+              <h2>Nostr Identity</h2>
+              <div id="nostrDetails" class="metrics"></div>
+              <div class="actions">
+                <button type="button" id="copyNpub" class="secondary" disabled>Copy npub</button>
+              </div>
+              <label>Nostr secret
+                <div class="secret-row">
+                  <input id="nostrSecret" type="password" autocomplete="off">
+                  <button type="button" id="revealNostr" class="icon-button" title="Reveal Nostr secret" aria-label="Reveal Nostr secret">👁</button>
+                </div>
+              </label>
+              <label>Relays <textarea id="nostrRelays" rows="6"></textarea></label>
+              <div class="actions">
+                <button type="button" id="saveNostrIdentity">Save Nostr Identity</button>
+              </div>
+              <div id="nostrSettingsStatus" class="field-status"></div>
             </div>
             <div class="panel">
               <h2>Topology Controls</h2>

@@ -9,6 +9,7 @@ export const DEFAULTS = Object.freeze({
   chunkDurationSeconds: 2,
   dataDirectory: resolvePath('tmp'),
   walletDirectory: resolvePath('data', 'wallet'),
+  nostrDirectory: resolvePath('data', 'nostr'),
   chunkDirectory: resolvePath('tmp', 'chunks'),
   storageDirectory: resolvePath('tmp', 'corestore'),
   playbackDirectory: resolvePath('tmp', 'playback'),
