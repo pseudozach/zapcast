@@ -58,7 +58,6 @@ function bindActions () {
   onClick('homeCreate', () => showTab('streamer'))
   onClick('homeJoin', () => showTab('viewer'))
   onClick('copyStreamId', () => copyButtonText('copyStreamId', $('streamIdOut').value))
-  onClick('announceNostr', async () => run(async () => withBusy('announceNostr', 'Publishing...', async () => announceOnNostr())))
   onClick('copyBroadcasterMetrics', () => copyText(metricsText(['streamId', 'uptime', 'chunksProduced', 'chunksAppended', 'uploadMbps', 'connectedPeers', 'bytesServed', 'chunksServed'])))
   onClick('copyFfmpegStatus', () => copyText($('ffmpegStatus')?.textContent || ''))
   onClick('copyViewerMetrics', () => copyText(viewerMetricsText()))
@@ -109,16 +108,16 @@ function bindActions () {
   $('rtmpUrl')?.addEventListener('input', validateRtmpField)
   onClick('startIngest', async () => run(async () => withBusy('startIngest', 'Starting...', async () => {
     validateRtmpField({ strict: true })
-    if (!$('streamIdOut').value.trim()) {
-      const stream = await app.createStream()
-      $('streamIdOut').value = stream.streamId
-    }
     if (!$('rtmpUrl').value.trim()) {
       throw new Error('Enter a source URL.')
     }
+    const stream = await app.createStream()
+    $('streamIdOut').value = stream.streamId
+    lastNostrAnnouncement = null
     await app.startIngest({
       rtmpUrl: $('rtmpUrl').value.trim()
     })
+    await maybeAnnounceStartedStream()
   })))
   onClick('stopIngest', async () => run(async () => withBusy('stopIngest', 'Stopping...', async () => {
     const announcement = lastNostrAnnouncement
@@ -268,7 +267,6 @@ function render () {
   renderNostrRefreshButton()
   renderNostrStreams()
   if ($('copyStreamId')) $('copyStreamId').disabled = !$('streamIdOut').value.trim()
-  if ($('announceNostr') && !$('announceNostr').classList.contains('busy')) $('announceNostr').disabled = !$('streamIdOut').value.trim() || !nostrIdentity?.hasSecret
   updateStreamingButtons(status)
   updateViewingButtons(status)
   renderMetrics($('broadcasterMetrics'), status.metrics, ['streamId', 'uptime', 'chunksProduced', 'chunksAppended', 'uploadMbps', 'connectedPeers', 'bytesServed', 'chunksServed'])
@@ -400,6 +398,7 @@ function renderNostrIdentity (identity = {}) {
     })
   }
   if ($('nostrRelays') && document.activeElement !== $('nostrRelays')) $('nostrRelays').value = (identity.relays || []).join('\n')
+  if ($('announceNostrDefault')) $('announceNostrDefault').checked = identity.announceByDefault !== false
   if ($('copyNpub')) $('copyNpub').disabled = !identity.npub
 }
 
@@ -572,7 +571,10 @@ async function saveNostrIdentity () {
     identity = await app.importNostr(nostrClient.identityFromSecret(secret))
     setNostrSecretField(identity.nsec || identity.secretKeyHex || '')
   }
-  identity = await app.updateNostrRelays({ relayText: $('nostrRelays').value })
+  identity = await app.updateNostrRelays({
+    relayText: $('nostrRelays').value,
+    announceByDefault: $('announceNostrDefault')?.checked !== false
+  })
   renderNostrIdentity(identity)
   setStatus('nostrSettingsStatus', 'Nostr identity saved.')
   return identity
@@ -621,6 +623,41 @@ async function announceOnNostr () {
   lastNostrAnnouncement = { streamId, title, description }
   setStatus('nostrPublishStatus', `Published to ${result.success} relay(s), failed on ${result.failure}.`)
   return result
+}
+
+async function maybeAnnounceStartedStream () {
+  const identity = nostrIdentity || await app.nostr()
+  nostrIdentity = identity
+  if (identity.announceByDefault === false) {
+    setStatus('nostrPublishStatus', 'Nostr auto-announce is disabled in Settings.')
+    return null
+  }
+  if (!identity.hasSecret) {
+    setStatus('nostrPublishStatus', 'Nostr auto-announce skipped: no Nostr secret configured.')
+    return null
+  }
+  setStatus('nostrPublishStatus', 'Waiting for first video segment before announcing on Nostr...')
+  const ready = await waitForStreamAppend()
+  if (!ready) {
+    setStatus('nostrPublishStatus', 'Nostr auto-announce delayed: no stream segments have been appended yet.')
+    return null
+  }
+  return announceOnNostr()
+}
+
+async function waitForStreamAppend ({ timeoutMs = 20000, intervalMs = 500 } = {}) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    await app.poll?.()
+    const metrics = app.status().metrics || {}
+    if (Number(metrics.chunksAppended || 0) > 0 || Number(metrics.latestSequence || 0) > 0) return true
+    await sleep(intervalMs)
+  }
+  return false
+}
+
+function sleep (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function publishNostrEnded ({ streamId, title = 'zapcast live stream', description = '' }) {

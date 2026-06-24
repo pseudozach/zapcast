@@ -44,11 +44,12 @@ export class NostrIdentityStore {
     return this.snapshot({ includeSecret: true })
   }
 
-  async updateRelays ({ relays, relayText } = {}) {
+  async updateRelays ({ relays, relayText, announceByDefault } = {}) {
     await this.ready()
     this.identity = normalizeIdentity({
       ...this.identity,
       relays: parseRelayList(relays || relayText),
+      announceByDefault: announceByDefault === undefined ? this.identity?.announceByDefault : toBoolean(announceByDefault),
       updatedAt: new Date().toISOString()
     })
     await this.write()
@@ -79,9 +80,14 @@ export function normalizeIdentity (identity = {}) {
     secretKeyHex: String(identity.secretKeyHex || '').trim().toLowerCase(),
     nsec: String(identity.nsec || '').trim(),
     relays,
+    announceByDefault: identity.announceByDefault !== false,
     createdAt: identity.createdAt || '',
     updatedAt: identity.updatedAt || ''
   }
+}
+
+function toBoolean (value) {
+  return value === true || value === 'true' || value === '1' || value === 'on'
 }
 
 export function validateIdentity (identity) {

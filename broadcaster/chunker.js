@@ -90,10 +90,12 @@ export class FfmpegChunker {
 }
 
 export function buildFfmpegArgs ({ input, mode, outputDirectory, chunkDurationSeconds }) {
-  const args = ['-hide_banner', '-loglevel', 'info']
+  const args = ['-hide_banner', '-loglevel', 'info', '-analyzeduration', '10000000', '-probesize', '10000000']
   if (mode === 'file') args.push('-re')
   args.push('-i', input)
   args.push(
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
     '-c:v', 'libx264',
     '-profile:v', 'baseline',
     '-level:v', '3.0',

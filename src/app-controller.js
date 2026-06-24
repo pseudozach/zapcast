@@ -103,6 +103,9 @@ export class ZapCastApp extends SimpleEmitter {
   }
 
   async createStream () {
+    if (this.streamFeed || this.swarm || this.control || this.ingest) {
+      await this.closeActiveSession()
+    }
     await this.prepareRole('broadcaster')
     this.role = 'broadcaster'
     this.metrics.role = 'broadcaster'

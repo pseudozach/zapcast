@@ -95,3 +95,22 @@ function playlistFiles (playlist) {
   }
   return [...new Set(files)].sort(sortChunks)
 }
+
+export function hasVideoTrack (data) {
+  return hasAscii(data, 'avc1') || hasAscii(data, 'avc3') || hasAscii(data, 'hvc1') || hasAscii(data, 'hev1') || hasAscii(data, 'vp09')
+}
+
+function hasAscii (data, text) {
+  const needle = [...text].map(char => char.charCodeAt(0))
+  for (let index = 0; index <= data.byteLength - needle.length; index++) {
+    let matched = true
+    for (let offset = 0; offset < needle.length; offset++) {
+      if (data[index + offset] !== needle[offset]) {
+        matched = false
+        break
+      }
+    }
+    if (matched) return true
+  }
+  return false
+}

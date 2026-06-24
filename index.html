@@ -73,7 +73,6 @@
               <label>Description <textarea id="nostrStreamDescription" rows="3">unstoppable live stream</textarea></label>
               <div class="actions">
                 <button type="button" id="copyStreamId" class="secondary" disabled>Copy Stream ID</button>
-                <button type="button" id="announceNostr" class="secondary" disabled>Announce on Nostr</button>
               </div>
               <div id="nostrPublishStatus" class="field-status"></div>
               <div class="panel-heading section-heading">
@@ -158,6 +157,7 @@
                 </div>
               </label>
               <label>Relays <textarea id="nostrRelays" rows="6"></textarea></label>
+              <label class="checkbox-row">Announce streams on Nostr by default <input type="checkbox" id="announceNostrDefault" checked></label>
               <div class="actions">
                 <button type="button" id="saveNostrIdentity">Save Nostr Identity</button>
               </div>
