@@ -575,6 +575,30 @@ video {
   background: #f9fbfc;
 }
 
+.metrics div.wallet-address-row {
+  align-items: center;
+  position: relative;
+}
+
+.wallet-address-row strong {
+  padding-right: 40px;
+}
+
+.wallet-address-copy {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  min-width: 30px;
+  min-height: 28px;
+  padding: 4px 7px;
+}
+
+.wallet-address-copy.copied {
+  border-color: #22c55e;
+  color: #15803d;
+}
+
 .metrics span {
   color: var(--muted);
 }

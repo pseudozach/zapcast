@@ -6,6 +6,9 @@ let mse = null
 let loadedNostrSecret = ''
 let walletBalance = null
 let balanceRefreshing = false
+let autoForwarding = false
+let walletAddressCopied = false
+let walletAddressCopyTimer = null
 let loadedWalletMnemonic = ''
 let nostrIdentity = null
 let nostrStreams = []
@@ -68,6 +71,8 @@ function bindActions () {
   onClick('copyLightningAddress', () => copyButtonText('copyLightningAddress', broadcasterLightningAddress()))
   onClick('revealWallet', async () => run(async () => revealWalletSecret()))
   onClick('refreshBalance', async () => run(async () => refreshWalletBalance()))
+  onClick('openWalletExplorer', () => openExternal(activeWallet().explorerBaseUrl))
+  onClick('openPaymentFaucet', () => openExternal(activeWallet().faucetUrl))
   onClick('refreshNostrStreams', async () => run(async () => refreshNostrStreams()))
   onClick('nostrPrev', () => { nostrPage = Math.max(0, nostrPage - 1); renderNostrStreams() })
   onClick('nostrNext', () => { nostrPage++; renderNostrStreams() })
@@ -102,8 +107,8 @@ function bindActions () {
     const amount = $('tipAmount').value.trim()
     const recipient = broadcasterPaymentAddress()
     const result = await sendTip({ amount, to: recipient })
-    setStatus('tipStatus', `Tip sent: ${result.txHash}`)
-    if (result.explorerUrl) setStatusLink('tipStatus', 'View tip transaction', result.explorerUrl)
+    setStatus('tipStatus', `Confirmed: ${result.txHash}`)
+    if (result.explorerUrl) setStatusLink('tipStatus', 'Confirmed — view transaction', result.explorerUrl)
   })))
   $('rtmpUrl')?.addEventListener('input', validateRtmpField)
   onClick('startIngest', async () => run(async () => withBusy('startIngest', 'Starting...', async () => {
@@ -378,6 +383,7 @@ function renderMetrics (node, metrics, keys = Object.keys(metrics)) {
   node.innerHTML = ''
   for (const key of keys) {
     const row = document.createElement('div')
+    row.dataset.metricKey = key
     row.innerHTML = `<span>${escapeHtml(key)}</span><strong>${escapeHtml(format(metrics[key]))}</strong>`
     node.appendChild(row)
   }
@@ -479,7 +485,9 @@ async function renderLightningReceive (peers = []) {
   const qr = $('lightningQr')
   if (!card || !input || !qr) return
 
-  const address = peers.find(peer => peer.role === 'broadcaster')?.payment?.lightningAddress || ''
+  const directPayment = peers.find(peer => peer.role === 'broadcaster')?.payment
+  const payment = directPayment || app.status().metrics.streamPayment
+  const address = payment?.network === 'lightning' ? payment.recipient || '' : ''
   card.hidden = !address
   input.value = address
   if ($('copyLightningAddress')) $('copyLightningAddress').disabled = !address
@@ -507,12 +515,13 @@ function renderBalance () {
   if (walletBalance?.error) {
     label.textContent = 'Balance: unavailable'
   } else if (walletBalance) {
-    label.textContent = `Balance: ${formatBalance(walletBalance.formatted)} ${walletBalance.symbol || 'USDC'}`
+    label.textContent = `Balance: ${formatBalance(walletBalance.formatted)} ${walletBalance.symbol || activeWallet().asset || 'BOT'}`
   } else {
-    label.textContent = 'Balance: -- USDC'
+    const wallet = activeWallet()
+    label.textContent = wallet.paymentKind === 'lightning' ? 'Payments: Lightning' : `Balance: -- ${wallet.asset || 'BOT'}`
   }
   if (refresh) {
-    refresh.disabled = balanceRefreshing || !walletAddress()
+    refresh.disabled = balanceRefreshing || !walletAddress() || activeWallet().paymentKind !== 'evm'
     refresh.classList.toggle('busy', balanceRefreshing)
   }
 }
@@ -522,8 +531,8 @@ function renderWallet (wallet = {}) {
   if (!details) return
   if (wallet.error) {
     renderMetrics(details, {
-      network: wallet.network || 'arc-testnet',
-      asset: wallet.asset || 'USDC',
+      network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+      asset: wallet.asset || 'BOT',
       status: 'wallet unavailable',
       error: wallet.error
     })
@@ -531,20 +540,55 @@ function renderWallet (wallet = {}) {
   }
   if (!wallet.address) {
     renderMetrics(details, {
-      network: wallet.network || 'arc-testnet',
-      asset: wallet.asset || 'USDC',
+      network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+      asset: wallet.asset || 'BOT',
       status: 'generating wallet...'
     })
     return
   }
   renderMetrics(details, {
-    network: wallet.network || 'arc-testnet',
-    asset: wallet.asset || 'USDC',
+    network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+    chainId: wallet.chainId ?? 'n/a',
+    asset: wallet.asset || 'BOT',
     address: wallet.address || ''
   })
+  renderWalletAddressCopy(details, wallet.address)
+  if ($('openWalletExplorer')) $('openWalletExplorer').disabled = !wallet.explorerBaseUrl
+  if ($('openPaymentFaucet')) {
+    $('openPaymentFaucet').hidden = !wallet.faucetUrl
+    $('openPaymentFaucet').disabled = !wallet.faucetUrl
+  }
+  if ($('lightningAddressSetting')) $('lightningAddressSetting').hidden = wallet.paymentKind !== 'lightning'
   if ($('forwardingAddress') && document.activeElement !== $('forwardingAddress')) $('forwardingAddress').value = wallet.forwardingAddress || ''
   if ($('lightningAddress') && document.activeElement !== $('lightningAddress')) $('lightningAddress').value = wallet.lightningAddress || ''
   if ($('forwardThreshold') && document.activeElement !== $('forwardThreshold')) $('forwardThreshold').value = wallet.forwardThreshold || '0.1'
+}
+
+function renderWalletAddressCopy (details, address) {
+  const row = details.querySelector('[data-metric-key="address"]')
+  if (!row || !address) return
+  row.classList.add('wallet-address-row')
+
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.id = 'copyWalletAddress'
+  button.className = `copy-button wallet-address-copy${walletAddressCopied ? ' copied' : ''}`
+  button.textContent = walletAddressCopied ? '✓' : '⧉'
+  button.title = walletAddressCopied ? 'Copied' : 'Copy wallet address'
+  button.setAttribute('aria-label', button.title)
+  button.addEventListener('click', () => run(async () => copyWalletAddress(address)))
+  row.appendChild(button)
+}
+
+async function copyWalletAddress (address) {
+  await copyText(address)
+  walletAddressCopied = true
+  clearTimeout(walletAddressCopyTimer)
+  renderWallet(activeWallet())
+  walletAddressCopyTimer = setTimeout(() => {
+    walletAddressCopied = false
+    renderWallet(activeWallet())
+  }, 1200)
 }
 
 async function ensureNostrIdentity () {
@@ -744,7 +788,13 @@ async function refreshWalletBalance ({ silent = false } = {}) {
   if (!silent) renderBalance()
   try {
     const walletClient = await import('./vendor/wallet-client.js')
-    walletBalance = await walletClient.getNativeUsdcBalance({ address })
+    const wallet = activeWallet()
+    if (wallet.paymentKind !== 'evm') {
+      walletBalance = null
+      return null
+    }
+    walletBalance = await walletClient.getNativeBalance({ address, network: paymentNetworkConfig(wallet) })
+    await maybeAutoForward(wallet)
     return walletBalance
   } catch (err) {
     walletBalance = { error: err?.message || String(err) }
@@ -937,37 +987,152 @@ async function sendTip ({ amount, to }) {
   const wallet = await app.revealWallet()
   if (!wallet.mnemonic) throw new Error('Wallet secret is not available.')
   const walletClient = await import('./vendor/wallet-client.js')
-  const result = await walletClient.sendNativeUsdc({
-    mnemonic: wallet.mnemonic,
-    to,
-    amount
-  })
-  await app.recordTransfer({
-    type: 'tip',
-    status: 'sent',
-    to,
-    amount,
-    asset: wallet.asset || 'USDC',
-    txHash: result.txHash,
-    explorerUrl: result.explorerUrl
-  })
-  await refreshWalletBalance({ silent: true }).catch(() => {})
-  return result
+  const network = paymentNetworkConfig(wallet)
+  let submitted = null
+  try {
+    const estimate = await walletClient.estimateNativeTransfer({ mnemonic: wallet.mnemonic, to, amount, network })
+    setStatus('tipStatus', `Estimated gas: ${formatBalance(estimate.feeFormatted)} ${estimate.symbol}. Sending...`)
+    const result = await walletClient.sendNativeTransfer({
+      mnemonic: wallet.mnemonic,
+      to,
+      amount,
+      network,
+      onSubmitted: transaction => {
+        submitted = transaction
+        setStatus('tipStatus', `Pending: ${transaction.txHash}`)
+        if (transaction.explorerUrl) setStatusLink('tipStatus', 'Pending — view transaction', transaction.explorerUrl)
+      }
+    })
+    await app.recordTransfer({
+      type: 'tip',
+      status: 'confirmed',
+      to,
+      amount,
+      network: wallet.network,
+      chainId: wallet.chainId,
+      asset: wallet.asset,
+      txHash: result.txHash,
+      explorerUrl: result.explorerUrl
+    })
+    await refreshWalletBalance({ silent: true }).catch(() => {})
+    return result
+  } catch (err) {
+    setStatus('tipStatus', `Failed: ${err.message}`)
+    await app.recordTransfer({
+      type: 'tip',
+      status: 'failed',
+      to,
+      amount,
+      network: wallet.network,
+      chainId: wallet.chainId,
+      asset: wallet.asset,
+      txHash: submitted?.txHash || '',
+      explorerUrl: submitted?.explorerUrl || ''
+    }).catch(() => {})
+    throw err
+  }
 }
 
 function broadcasterPaymentAddress () {
-  const peers = app.status().metrics.connectedPeers || []
-  return peers.find(peer => peer.role === 'broadcaster')?.payment?.address || ''
+  return broadcasterPayment()?.recipient || ''
 }
 
 function broadcasterLightningAddress () {
+  const payment = broadcasterPayment()
+  return payment?.network === 'lightning' ? payment.recipient || '' : ''
+}
+
+function broadcasterPayment () {
   const peers = app.status().metrics.connectedPeers || []
-  return peers.find(peer => peer.role === 'broadcaster')?.payment?.lightningAddress || ''
+  const payment = peers.find(peer => peer.role === 'broadcaster')?.payment || app.status().metrics.streamPayment
+  const wallet = activeWallet()
+  if (!payment?.recipient || payment.network !== wallet.network || payment.chainId !== wallet.chainId) return null
+  return payment
 }
 
 function walletAddress () {
   const status = app.status()
   return status.wallet?.address || status.metrics.wallet?.address || ''
+}
+
+function activeWallet () {
+  const status = app.status()
+  return status.wallet || status.metrics.wallet || status.config?.paymentNetwork || {}
+}
+
+function paymentNetworkConfig (wallet = activeWallet()) {
+  return {
+    key: wallet.network,
+    name: wallet.networkName || wallet.network,
+    kind: wallet.paymentKind,
+    chainId: wallet.chainId,
+    asset: wallet.asset,
+    decimals: wallet.decimals,
+    explorerUrl: wallet.explorerBaseUrl,
+    testnet: Boolean(wallet.faucetUrl)
+  }
+}
+
+async function maybeAutoForward (wallet) {
+  if (autoForwarding || !wallet.forwardingAddress) return
+  const threshold = Number(wallet.forwardThreshold)
+  const balance = Number(walletBalance?.formatted)
+  if (!Number.isFinite(threshold) || threshold <= 0 || !Number.isFinite(balance) || balance < threshold) return
+
+  autoForwarding = true
+  let submitted = null
+  try {
+    const secretWallet = await app.revealWallet()
+    const walletClient = await import('./vendor/wallet-client.js')
+    const result = await walletClient.forwardNativeBalance({
+      mnemonic: secretWallet.mnemonic,
+      to: wallet.forwardingAddress,
+      network: paymentNetworkConfig(wallet),
+      onSubmitted: transaction => { submitted = transaction }
+    })
+    await app.recordTransfer({
+      type: 'forward',
+      status: 'confirmed',
+      to: wallet.forwardingAddress,
+      amount: result.amount,
+      network: wallet.network,
+      chainId: wallet.chainId,
+      asset: wallet.asset,
+      txHash: result.txHash,
+      explorerUrl: result.explorerUrl
+    })
+    walletBalance = await walletClient.getNativeBalance({
+      address: wallet.address,
+      network: paymentNetworkConfig(wallet)
+    })
+  } catch (err) {
+    console.error('ZapCast auto-forward failed', err)
+    if (submitted) {
+      await app.recordTransfer({
+        type: 'forward',
+        status: 'failed',
+        to: wallet.forwardingAddress,
+        amount: '',
+        network: wallet.network,
+        chainId: wallet.chainId,
+        asset: wallet.asset,
+        txHash: submitted.txHash,
+        explorerUrl: submitted.explorerUrl
+      }).catch(() => {})
+    }
+    await app.reportError?.(err)
+  } finally {
+    autoForwarding = false
+  }
+}
+
+function openExternal (url) {
+  if (!url) return
+  if (window.zapcastDesktop?.openExternal) {
+    window.zapcastDesktop.openExternal(url)
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function hasSpendableBalance () {
@@ -1025,6 +1190,11 @@ function setStatusLink (id, label, href) {
   const node = $(id)
   if (!node) return
   node.innerHTML = `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`
+  node.querySelector('a')?.addEventListener('click', event => {
+    if (!window.zapcastDesktop?.openExternal) return
+    event.preventDefault()
+    openExternal(href)
+  })
 }
 
 async function reportPlaybackState () {

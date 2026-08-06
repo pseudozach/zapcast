@@ -6,16 +6,13 @@ import { appendFile, mkdir, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { build } from 'esbuild'
 import { postJson } from '../utils/http-json.js'
+import { getPaymentNetwork } from '../payments/networks.js'
 
 const PORT = 43741
 const PREFIX = '[zapcast-launcher]'
 const COMMANDS_FILE = join(process.cwd(), 'tmp', 'window-commands.jsonl')
 const PEAR_EXECUTABLE = resolvePearExecutable()
-const ARC_RPC_URLS = [
-  'https://rpc.quicknode.testnet.arc.network',
-  'https://rpc.blockdaemon.testnet.arc.network',
-  'https://rpc.testnet.arc.network'
-]
+const paymentNetwork = getPaymentNetwork()
 let nextWalletSlot = 2
 
 log(`starting from ${process.cwd()}`)
@@ -45,8 +42,8 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (req.url === '/arc-rpc') {
-    readJson(req).then(forwardArcRpc).then(result => {
+  if (req.url === '/payment-rpc' || req.url === '/arc-rpc') {
+    readJson(req).then(forwardPaymentRpc).then(result => {
       sendJson(res, 200, result)
     }, err => {
       sendJson(res, 200, rpcErrorResponse(null, err))
@@ -168,14 +165,15 @@ async function readJson (req) {
   return text ? JSON.parse(text) : {}
 }
 
-async function forwardArcRpc (body) {
+async function forwardPaymentRpc (body) {
+  if (paymentNetwork.kind !== 'evm') return rpcErrorResponse(body, new Error(`${paymentNetwork.name} does not use EVM JSON-RPC`))
   let lastError = null
-  for (const rpcUrl of ARC_RPC_URLS) {
+  for (const rpcUrl of paymentNetwork.rpcUrls) {
     try {
       return await postJson(rpcUrl, body)
     } catch (err) {
       lastError = err
-      log(`Arc RPC forward failed via ${rpcUrl}: ${err.message}`)
+      log(`${paymentNetwork.name} RPC forward failed via ${rpcUrl}: ${err.message}`)
     }
   }
   return rpcErrorResponse(body, lastError)
@@ -184,7 +182,7 @@ async function forwardArcRpc (body) {
 function rpcErrorResponse (body, err) {
   const error = {
     code: -32000,
-    message: `Arc RPC unavailable: ${err?.message || 'request failed'}`
+    message: `${paymentNetwork.name} RPC unavailable: ${err?.message || 'request failed'}`
   }
   if (Array.isArray(body)) return body.map(item => ({ jsonrpc: '2.0', id: item?.id ?? null, error }))
   return { jsonrpc: '2.0', id: body?.id ?? null, error }

@@ -12,7 +12,7 @@ ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. A s
 - Automatically keep a rolling 300 chunk relay cache.
 - Exchange debug control messages: `hello`, `have`, `want`, `stats`, and `topology`.
 - Apply allowlist, blocklist, preferred relay, direct broadcaster denial, and broadcaster connection limit controls.
-- Generate a local Arc Testnet wallet, advertise broadcaster payment metadata, and send viewer tips to broadcasters.
+- Generate a local self-custodial EVM wallet, advertise broadcaster payment metadata, and send viewer tips over BOTChain Testnet by default.
 - Announce and discover live ZapCast streams through Nostr NIP-53 kind 30311 events.
 - Track broadcaster/viewer metrics, payment settings, and export JSON/CSV debug reports.
 - Clean per-instance temporary stream data on app shutdown.
@@ -75,7 +75,7 @@ Default relays:
 
 To announce a stream, create/start a stream in `Streamer`, set the title and description, then click `Announce on Nostr`. When the stream is stopped from the app, ZapCast publishes an updated `kind:30311` event with the same `d` tag and `status=ended`.
 
-Each machine gets a separate local Nostr keypair stored under `data/nostr` in the app data directory. This key is not the Arc wallet key and not the Hypercore/Hyperswarm stream key. In `Settings`, the Nostr Identity card shows the `npub`, lets you copy it, keeps the generated `nsec` hidden behind a reveal button, allows replacing it with an imported `nsec` or 64-character private key, and lets you edit the relay list.
+Each machine gets a separate local Nostr keypair stored under `data/nostr` in the app data directory. This key is not the payment wallet key and not the Hypercore/Hyperswarm stream key. In `Settings`, the Nostr Identity card shows the `npub`, lets you copy it, keeps the generated `nsec` hidden behind a reveal button, allows replacing it with an imported `nsec` or 64-character private key, and lets you edit the relay list.
 
 The Home screen queries configured relays for `{ kinds: [30311], "#t": ["zapcast"], limit: 50 }`, filters live ZapCast events client-side, and can auto-fill/join a selected stream.
 
@@ -85,21 +85,36 @@ The Home screen queries configured relays for `{ kinds: [30311], "#t": ["zapcast
 2. Go to `Viewer`.
 3. Paste the stream ID.
 4. Click `Join Stream`.
-5. To tip the broadcaster, enter a USDC amount and click `Tip Broadcaster`.
+5. To tip the broadcaster, enter a BOT amount and click `Tip Broadcaster`.
 
 The viewer joins the stream topic, replicates the Hypercore feed, buffers records, and relays available chunks to peers through normal Hypercore replication.
 
 ## Settings And Payments
 
-Each app instance gets a local Arc Testnet wallet generated with `viem` in the Electron renderer. The Pear/Bare backend persists the wallet metadata and transfer receipts, but does not import viem directly. The wallet address is shown in `Settings`; the mnemonic is hidden until you reveal it. Back it up before funding the wallet.
+Each app instance gets a local self-custodial EVM wallet generated with `viem` in the Electron renderer. The Pear/Bare backend persists the wallet metadata and transfer receipts, but does not import viem directly. The wallet address is shown in `Settings`; the mnemonic is hidden until you reveal it. Back it up before funding the wallet.
 
-ZapCast currently uses Arc Testnet native USDC for tips. Broadcasters publish their payment address in stream/control metadata, so viewers can tip the broadcaster without entering a recipient address manually. Ark and Lightning support can fit behind the same payment metadata model later.
+BOTChain Testnet is the default payment network. ZapCast checks native BOT balances, estimates gas, sends native BOT tips, waits for confirmation, and links receipts to BOTScan. Broadcasters publish only their public network, chain ID, asset, and recipient in stream/control metadata, so viewers never enter a recipient manually. Test BOT is available from the [official faucet](https://faucet.botchain.ai/basic).
+
+The active network comes from one optional environment variable. For local development, copy the maintained example file and edit its single value:
+
+```sh
+cp .env.example .env
+npm run start:desktop
+```
+
+Both `npm start` and `npm run start:desktop` load `.env` automatically when it exists. A shell environment variable can also be supplied directly:
+
+```sh
+ZAPCAST_PAYMENT_NETWORK=botchain-mainnet npm run start:desktop
+```
+
+Supported values are `botchain-testnet`, `botchain-mainnet`, `arc-testnet`, and `lightning`. If the variable or `.env` file is omitted, ZapCast uses `botchain-testnet`. The local `.env` file is ignored by Git; `.env.example` is committed and should be updated whenever supported configuration changes. Packaged applications use operating-system environment variables and default to BOTChain Testnet when none is provided. Switching to BOTChain Mainnet requires no payment code or wallet migration. Existing Arc wallet files are not overwritten, and Arc Testnet or Lightning is not advertised as active unless selected.
 
 Optional forwarding settings:
 
 - `Forwarding address`: your main wallet address.
-- `Auto-forward threshold`: when the app wallet balance is at or above this USDC amount, ZapCast forwards the spendable balance and records the transfer in `data/wallet/transfers.csv`.
-- `Lightning address`: optional `name@domain` address advertised with broadcaster metadata. Viewers see it below the video with a copy button and QR code so they can send sats outside the Arc tip flow.
+- `Auto-forward threshold`: when the app wallet balance reaches this amount of the active EVM asset, ZapCast forwards the spendable balance after reserving the network fee and records the confirmed transfer in `data/wallet/transfers.csv`.
+- `Lightning address`: shown and advertised only when `ZAPCAST_PAYMENT_NETWORK=lightning` is selected. Viewers then see it below the video with a copy button and QR code.
 
 Persistent wallets are stored by wallet slot under `data/wallet/slots/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes. Packaged builds place these directories in the operating system's ZapCast application-data directory, not beside the installed executable.
 

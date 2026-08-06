@@ -127,9 +127,7 @@ class ApiClient {
       metrics: {
         ...this.status().metrics,
         wallet,
-        payment: wallet.address
-          ? { type: 'arc-testnet', chain: 'arc-testnet', asset: wallet.asset, address: wallet.address, lightningAddress: wallet.lightningAddress || '' }
-          : this.status().metrics.payment
+        payment: paymentMetadataFromWallet(wallet) || this.status().metrics.payment
       }
     }
     this.emit('metrics', this.lastStatus.metrics)
@@ -283,6 +281,18 @@ class ApiClient {
     const separator = path.includes('?') ? '&' : '?'
     return `${path}${separator}instance=${encodeURIComponent(this.instanceId)}&walletSlot=${encodeURIComponent(this.walletSlot)}`
   }
+}
+
+function paymentMetadataFromWallet (wallet) {
+  if (!wallet) return null
+  if (wallet.paymentKind === 'lightning') {
+    return wallet.lightningAddress
+      ? { network: wallet.network, chainId: null, asset: wallet.asset, recipient: wallet.lightningAddress }
+      : null
+  }
+  return wallet.address
+    ? { network: wallet.network, chainId: wallet.chainId, asset: wallet.asset, recipient: wallet.address }
+    : null
 }
 
 function describeData (data) {

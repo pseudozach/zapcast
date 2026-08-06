@@ -15,6 +15,7 @@ import { SimpleEmitter } from '../utils/emitter.js'
 import { joinPath, runtimeArgv } from '../utils/platform.js'
 import { cleanupInstanceData } from '../utils/cleanup.js'
 import { NostrIdentityStore } from './nostr/keys.js'
+import { getPaymentNetwork, publicPaymentNetwork } from '../payments/networks.js'
 
 export class ZapCastApp extends SimpleEmitter {
   constructor (options = {}) {
@@ -36,11 +37,13 @@ export class ZapCastApp extends SimpleEmitter {
     this.control = null
     this.ingest = null
     this.payments = splitZap({ sats: 0 })
+    this.paymentNetwork = getPaymentNetwork()
     this.wallet = new PaymentWallet({
       directory: joinPath(DEFAULTS.walletDirectory, 'slots', `slot-${this.walletSlot}`),
       legacyDirectory: DEFAULTS.walletDirectory,
       slot: this.walletSlot,
-      logger: this.eventLog
+      logger: this.eventLog,
+      network: this.paymentNetwork
     })
     this.walletError = ''
     this.walletReady = this.initWallet()
@@ -218,7 +221,8 @@ export class ZapCastApp extends SimpleEmitter {
       liveLatency: 0,
       bufferSize: 0,
       currentSequence: 0,
-      latestSequence: 0
+      latestSequence: 0,
+      streamPayment: null
     })
     this.eventLog.add('viewing_stopped', {
       role: 'viewer',
@@ -292,7 +296,8 @@ export class ZapCastApp extends SimpleEmitter {
       currentSequence: record.meta.seq,
       latestSequence: Math.max(record.meta.seq, this.metrics.snapshot().latestSequence),
       bufferSize: this.records.length,
-      liveLatency: Math.max(0, Date.now() - Date.parse(record.meta.appendedAt))
+      liveLatency: Math.max(0, Date.now() - Date.parse(record.meta.appendedAt)),
+      streamPayment: record.meta.payment || this.metrics.snapshot().streamPayment || null
     })
     this.eventLog.add('chunk_received', {
       role: 'viewer',
@@ -370,15 +375,26 @@ export class ZapCastApp extends SimpleEmitter {
     })
     const result = {
       txHash: transfer.txHash || '',
-      explorerUrl: transfer.explorerUrl || ''
+      status: transfer.status || '',
+      network: transfer.network || this.paymentNetwork.key,
+      chainId: transfer.chainId ?? this.paymentNetwork.chainId,
+      asset: transfer.asset || this.paymentNetwork.asset,
+      amount: transfer.amount || '',
+      publicWalletAddress: this.wallet.snapshot().address,
+      explorerUrl: transfer.explorerUrl || '',
+      forwardingTransaction: transfer.type === 'forward' ? transfer.txHash || '' : ''
     }
     this.metrics.set({ lastTransfer: result })
-    this.eventLog.add(transfer.type === 'forward' ? 'wallet_forwarded' : 'tip_sent', {
+    const failed = transfer.status === 'failed'
+    const event = transfer.type === 'forward'
+      ? failed ? 'wallet_forward_failed' : 'wallet_forwarded'
+      : failed ? 'tip_failed' : 'tip_sent'
+    this.eventLog.add(event, {
       role: this.role,
       peerId: snapshot.peerId,
       streamId: snapshot.streamId,
       targetPeerId: transfer.to || '',
-      message: `${transfer.amount || ''} ${transfer.asset || 'USDC'} ${transfer.txHash || ''}`
+      message: `${transfer.amount || ''} ${transfer.asset || this.paymentNetwork.asset} ${transfer.txHash || ''}`
     })
     return result
   }
@@ -427,6 +443,7 @@ export class ZapCastApp extends SimpleEmitter {
       appVersion: APP_VERSION,
       instanceId: this.instanceId,
       walletSlot: this.walletSlot,
+      paymentNetwork: publicPaymentNetwork(this.paymentNetwork),
       defaults: DEFAULTS,
       dataPaths: this.currentDataPaths,
       topology: this.topology.snapshot()
@@ -435,12 +452,19 @@ export class ZapCastApp extends SimpleEmitter {
 
   paymentMetadata () {
     const wallet = this.wallet.snapshot()
+    if (this.paymentNetwork.kind === 'lightning') {
+      return {
+        network: this.paymentNetwork.key,
+        chainId: null,
+        asset: this.paymentNetwork.asset,
+        recipient: wallet.lightningAddress || ''
+      }
+    }
     return {
-      type: 'arc-testnet',
-      chain: 'arc-testnet',
-      asset: wallet.asset,
-      address: wallet.address,
-      lightningAddress: wallet.lightningAddress || ''
+      network: this.paymentNetwork.key,
+      chainId: this.paymentNetwork.chainId,
+      asset: this.paymentNetwork.asset,
+      recipient: wallet.address
     }
   }
 

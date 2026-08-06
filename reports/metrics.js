@@ -39,7 +39,15 @@ export function buildReportMetrics ({ config, metrics, eventLog, payments }) {
       propagationLatency: snapshot.propagationLatency,
       liveLatency: snapshot.liveLatency
     },
-    payments,
+    payments: {
+      ...payments,
+      selectedNetwork: snapshot.wallet?.network || config.paymentNetwork?.key || '',
+      chainId: snapshot.wallet?.chainId ?? config.paymentNetwork?.chainId ?? null,
+      publicWalletAddress: snapshot.wallet?.address || '',
+      asset: snapshot.wallet?.asset || config.paymentNetwork?.asset || '',
+      lastTransaction: snapshot.lastTransfer || null,
+      forwardingTransaction: snapshot.lastTransfer?.forwardingTransaction || ''
+    },
     errors: snapshot.errors,
     events
   }

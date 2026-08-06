@@ -40063,79 +40063,126 @@ var wordlist10 = `\u7684
 \u6B47`.split("\n");
 
 // ui/wallet-client.js
-var ARC_RPC_PROXY = "/api/arc-rpc";
-var ARC_EXPLORER_URL = "https://testnet.arcscan.app";
-var zapcastArcTestnet = {
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: {
-    name: "USDC",
-    symbol: "USDC",
-    decimals: 18
-  },
-  rpcUrls: {
-    default: {
-      http: [ARC_RPC_PROXY],
-      webSocket: []
-    }
-  },
-  blockExplorers: {
-    default: {
-      name: "ArcScan",
-      url: ARC_EXPLORER_URL
-    }
-  },
-  testnet: true
-};
+var PAYMENT_RPC_PROXY = "/api/payment-rpc";
 function generateWallet() {
   const mnemonic = generateMnemonic2(wordlist2);
   const account = mnemonicToAccount(mnemonic);
-  return {
-    mnemonic,
-    address: account.address
-  };
+  return { mnemonic, address: account.address };
 }
 function walletFromMnemonic(mnemonic) {
   const normalized = String(mnemonic || "").trim().toLowerCase().replace(/\s+/g, " ");
   if (!normalized) throw new Error("Wallet mnemonic is required.");
   if (!validateMnemonic(normalized, wordlist2)) throw new Error("Enter a valid BIP-39 mnemonic.");
   const account = mnemonicToAccount(normalized);
-  return {
-    mnemonic: normalized,
-    address: account.address
-  };
+  return { mnemonic: normalized, address: account.address };
 }
-async function sendNativeUsdc({ mnemonic, to, amount }) {
-  const account = mnemonicToAccount(mnemonic);
-  const client = createWalletClient({
-    account,
-    chain: zapcastArcTestnet,
-    transport: http(ARC_RPC_PROXY)
-  });
-  const txHash = await client.sendTransaction({
-    to,
-    value: parseUnits(amount, 18)
-  });
-  return {
-    txHash,
-    explorerUrl: `${ARC_EXPLORER_URL}/tx/${txHash}`
-  };
-}
-async function getNativeUsdcBalance({ address }) {
-  const client = createPublicClient({
-    chain: zapcastArcTestnet,
-    transport: http(ARC_RPC_PROXY)
-  });
+async function getNativeBalance({ address, network }) {
+  const config = requireEvmNetwork(network);
+  const client = publicClient(config);
   const value = await client.getBalance({ address });
   return {
     raw: value.toString(),
-    formatted: formatUnits(value, 18),
-    symbol: "USDC"
+    formatted: formatUnits(value, config.decimals),
+    symbol: config.asset
   };
 }
+async function estimateNativeTransfer({ mnemonic, to, amount, network }) {
+  const config = requireEvmNetwork(network);
+  const account = mnemonicToAccount(mnemonic);
+  const client = publicClient(config);
+  const value = parseUnits(String(amount), config.decimals);
+  if (value <= 0n) throw new Error(`Tip amount must be greater than zero ${config.asset}.`);
+  const [gas, gasPrice] = await Promise.all([
+    client.estimateGas({ account: account.address, to, value }),
+    client.getGasPrice()
+  ]);
+  const fee = gas * gasPrice;
+  return {
+    gas: gas.toString(),
+    feeRaw: fee.toString(),
+    feeFormatted: formatUnits(fee, config.decimals),
+    symbol: config.asset
+  };
+}
+async function sendNativeTransfer({ mnemonic, to, amount, network, onSubmitted }) {
+  const config = requireEvmNetwork(network);
+  const account = mnemonicToAccount(mnemonic);
+  const chain2 = viemChain(config);
+  const transport = http(PAYMENT_RPC_PROXY);
+  const walletClient = createWalletClient({ account, chain: chain2, transport });
+  const client = createPublicClient({ chain: chain2, transport });
+  const txHash = await walletClient.sendTransaction({
+    to,
+    value: parseUnits(String(amount), config.decimals)
+  });
+  const explorerUrl = transactionUrl(config, txHash);
+  onSubmitted?.({ txHash, explorerUrl });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") throw new Error("Transaction failed on-chain.");
+  return { txHash, explorerUrl, status: "confirmed" };
+}
+async function forwardNativeBalance({ mnemonic, to, network, onSubmitted }) {
+  const config = requireEvmNetwork(network);
+  const account = mnemonicToAccount(mnemonic);
+  const chain2 = viemChain(config);
+  const transport = http(PAYMENT_RPC_PROXY);
+  const client = createPublicClient({ chain: chain2, transport });
+  const balance = await client.getBalance({ address: account.address });
+  const [gas, gasPrice] = await Promise.all([
+    client.estimateGas({ account: account.address, to, value: balance / 2n }),
+    client.getGasPrice()
+  ]);
+  const fee = gas * gasPrice;
+  const value = balance - fee;
+  if (value <= 0n) throw new Error(`Balance is too low to cover the ${config.asset} network fee.`);
+  const walletClient = createWalletClient({ account, chain: chain2, transport });
+  const txHash = await walletClient.sendTransaction({ to, value, gas, gasPrice });
+  const explorerUrl = transactionUrl(config, txHash);
+  onSubmitted?.({ txHash, explorerUrl });
+  const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") throw new Error("Forwarding transaction failed on-chain.");
+  return {
+    txHash,
+    explorerUrl,
+    status: "confirmed",
+    amount: formatUnits(value, config.decimals)
+  };
+}
+var getNativeUsdcBalance = getNativeBalance;
+var sendNativeUsdc = sendNativeTransfer;
+function publicClient(config) {
+  return createPublicClient({ chain: viemChain(config), transport: http(PAYMENT_RPC_PROXY) });
+}
+function requireEvmNetwork(network) {
+  if (!network || network.kind !== "evm" || !Number.isInteger(network.chainId)) {
+    throw new Error(`${network?.name || "Selected payment network"} does not support native EVM transfers.`);
+  }
+  return network;
+}
+function viemChain(network) {
+  return {
+    id: network.chainId,
+    name: network.name,
+    nativeCurrency: {
+      name: network.asset,
+      symbol: network.asset,
+      decimals: network.decimals
+    },
+    rpcUrls: { default: { http: [PAYMENT_RPC_PROXY], webSocket: [] } },
+    blockExplorers: network.explorerUrl ? { default: { name: `${network.name} Explorer`, url: network.explorerUrl } } : void 0,
+    testnet: Boolean(network.testnet)
+  };
+}
+function transactionUrl(network, hash3) {
+  return network.explorerUrl && hash3 ? `${network.explorerUrl}/tx/${hash3}` : "";
+}
 export {
+  estimateNativeTransfer,
+  forwardNativeBalance,
   generateWallet,
+  getNativeBalance,
   getNativeUsdcBalance,
+  sendNativeTransfer,
   sendNativeUsdc,
   walletFromMnemonic
 };

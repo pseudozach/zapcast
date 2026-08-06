@@ -1,17 +1,19 @@
 import { DEFAULTS } from '../src/config.js'
 import { fsPromises, joinPath } from '../utils/platform.js'
+import { explorerTransactionUrl, getPaymentNetwork, publicPaymentNetwork } from './networks.js'
 
 const WALLET_FILE = 'wallet.json'
 const WALLET_ARCHIVE_DIRECTORY = 'wallets'
 const TRANSFERS_FILE = 'transfers.csv'
-const ARC_EXPLORER_URL = 'https://testnet.arcscan.app'
+const TRANSFERS_HEADER = 'timestamp,type,status,role,streamId,from,to,amount,asset,txHash,explorerUrl,network,chainId'
 
 export class PaymentWallet {
-  constructor ({ directory = DEFAULTS.walletDirectory, legacyDirectory = '', slot = 1, logger } = {}) {
+  constructor ({ directory = DEFAULTS.walletDirectory, legacyDirectory = '', slot = 1, logger, network = getPaymentNetwork() } = {}) {
     this.directory = directory
     this.legacyDirectory = legacyDirectory
     this.slot = Number(slot) || 1
     this.logger = logger
+    this.network = network
     this.wallet = null
   }
 
@@ -175,6 +177,8 @@ export class PaymentWallet {
       ...this.wallet,
       mnemonic: String(mnemonic || '').trim(),
       address: String(address || '').trim(),
+      network: this.wallet?.address ? this.wallet.network : this.network.key,
+      asset: this.wallet?.address ? this.wallet.asset : this.network.asset,
       createdAt: this.wallet?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     })
@@ -224,12 +228,16 @@ export class PaymentWallet {
       this.wallet.address,
       transfer.to,
       transfer.amount,
-      transfer.asset || this.wallet.asset,
+      transfer.asset || this.network.asset,
       transfer.txHash,
-      transfer.explorerUrl || explorerTxUrl(transfer.txHash)
+      transfer.explorerUrl || explorerTransactionUrl(this.network, transfer.txHash),
+      transfer.network || this.network.key,
+      transfer.chainId ?? this.network.chainId ?? ''
     ].map(csvCell).join(',')
     if (!exists) {
-      await fs.writeFile(file, 'timestamp,type,status,role,streamId,from,to,amount,asset,txHash,explorerUrl\n')
+      await fs.writeFile(file, `${TRANSFERS_HEADER}\n`)
+    } else {
+      await upgradeTransferHeader(fs, file)
     }
     await fs.appendFile(file, `${row}\n`)
     this.wallet.lastUsedAt = new Date().toISOString()
@@ -265,17 +273,23 @@ export class PaymentWallet {
   }
 
   snapshot ({ includeSecret = false } = {}) {
-    if (!this.wallet) return emptyWallet()
+    if (!this.wallet) return emptyWallet(this.network)
+    const network = publicPaymentNetwork(this.network)
     return {
       address: this.wallet.address,
       mnemonic: includeSecret ? this.wallet.mnemonic : '',
-      network: this.wallet.network,
-      asset: this.wallet.asset,
+      network: network.key,
+      networkName: network.name,
+      paymentKind: network.kind,
+      chainId: network.chainId,
+      asset: network.asset,
+      decimals: network.decimals,
       forwardingAddress: this.wallet.forwardingAddress,
       forwardThreshold: this.wallet.forwardThreshold,
       lightningAddress: this.wallet.lightningAddress,
       transfersFile: joinPath(this.directory, TRANSFERS_FILE),
-      explorerBaseUrl: ARC_EXPLORER_URL
+      explorerBaseUrl: network.explorerUrl,
+      faucetUrl: network.faucetUrl
     }
   }
 }
@@ -299,17 +313,23 @@ function walletTimestamp (wallet, fallback = 0) {
   return Date.parse(wallet.lastUsedAt || wallet.updatedAt || wallet.createdAt) || fallback || 0
 }
 
-function emptyWallet () {
+function emptyWallet (selectedNetwork = getPaymentNetwork()) {
+  const network = publicPaymentNetwork(selectedNetwork)
   return {
     address: '',
     mnemonic: '',
-    network: 'arc-testnet',
-    asset: 'USDC',
+    network: network.key,
+    networkName: network.name,
+    paymentKind: network.kind,
+    chainId: network.chainId,
+    asset: network.asset,
+    decimals: network.decimals,
     forwardingAddress: '',
     forwardThreshold: '0.1',
     lightningAddress: '',
     transfersFile: '',
-    explorerBaseUrl: ARC_EXPLORER_URL
+    explorerBaseUrl: network.explorerUrl,
+    faucetUrl: network.faucetUrl
   }
 }
 
@@ -321,12 +341,18 @@ function isLightningAddress (value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''))
 }
 
-function explorerTxUrl (hash) {
-  return hash ? `${ARC_EXPLORER_URL}/tx/${hash}` : ''
-}
-
 function csvCell (value) {
   const text = String(value ?? '')
   if (!/[",\n]/.test(text)) return text
   return `"${text.replaceAll('"', '""')}"`
+}
+
+async function upgradeTransferHeader (fs, file) {
+  const content = await fs.readFile(file, 'utf8')
+  const newline = content.indexOf('\n')
+  const header = newline === -1 ? content : content.slice(0, newline)
+  if (header === TRANSFERS_HEADER) return
+  if (header !== 'timestamp,type,status,role,streamId,from,to,amount,asset,txHash,explorerUrl') return
+  const rows = newline === -1 ? '' : content.slice(newline + 1)
+  await fs.writeFile(file, `${TRANSFERS_HEADER}\n${rows}`)
 }

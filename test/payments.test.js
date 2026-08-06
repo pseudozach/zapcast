@@ -1,0 +1,52 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DEFAULT_PAYMENT_NETWORK, getPaymentNetwork, publicPaymentNetwork } from '../payments/networks.js'
+import { PaymentWallet } from '../payments/wallet.js'
+
+test('BOTChain Testnet is the default payment network', () => {
+  const network = getPaymentNetwork({})
+  assert.equal(DEFAULT_PAYMENT_NETWORK, 'botchain-testnet')
+  assert.equal(network.chainId, 968)
+  assert.equal(network.rpcUrls[0], 'https://rpc.bohr.life')
+  assert.equal(network.asset, 'BOT')
+  assert.equal(network.explorerUrl, 'https://scan.bohr.life')
+  assert.equal(network.faucetUrl, 'https://faucet.botchain.ai/basic')
+})
+
+test('one environment value selects BOTChain Mainnet', () => {
+  const network = publicPaymentNetwork(getPaymentNetwork({ ZAPCAST_PAYMENT_NETWORK: 'botchain-mainnet' }))
+  assert.equal(network.key, 'botchain-mainnet')
+  assert.equal(network.chainId, 677)
+  assert.equal(network.asset, 'BOT')
+  assert.equal(network.explorerUrl, 'https://scan.botchain.ai')
+})
+
+test('unsupported payment network values fail clearly', () => {
+  assert.throws(
+    () => getPaymentNetwork({ ZAPCAST_PAYMENT_NETWORK: 'testnet' }),
+    /Unsupported ZAPCAST_PAYMENT_NETWORK/
+  )
+})
+
+test('selecting BOTChain does not overwrite an existing Arc wallet file', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'zapcast-wallet-'))
+  const existing = {
+    mnemonic: 'existing wallet material',
+    address: '0x1111111111111111111111111111111111111111',
+    network: 'arc-testnet',
+    asset: 'USDC'
+  }
+  try {
+    await writeFile(join(directory, 'wallet.json'), JSON.stringify(existing))
+    const wallet = new PaymentWallet({ directory, network: getPaymentNetwork({}) })
+    await wallet.ready()
+
+    assert.equal(wallet.snapshot().network, 'botchain-testnet')
+    assert.deepEqual(JSON.parse(await readFile(join(directory, 'wallet.json'), 'utf8')), existing)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})

@@ -4,9 +4,11 @@ import { ZapCastApp } from './app-controller.js'
 import { DEFAULTS } from './config.js'
 import { fsPromises, joinPath } from '../utils/platform.js'
 import { postJson } from '../utils/http-json.js'
+import { getPaymentNetwork } from '../payments/networks.js'
 
 const WINDOW_COMMANDS_FILE = joinPath(DEFAULTS.dataDirectory, 'window-commands.jsonl')
-const ARC_RPC_PROXY_URL = 'http://127.0.0.1:43741/arc-rpc'
+const paymentNetwork = getPaymentNetwork()
+const PAYMENT_RPC_PROXY_URL = 'http://127.0.0.1:43741/payment-rpc'
 
 const runtime = new Runtime()
 log('runtime created')
@@ -43,10 +45,10 @@ function attachApi (bridge, apps) {
       return staticHandler.call(bridge.server, req, res)
     }
 
-    if (url.pathname === '/api/arc-rpc') {
+    if (url.pathname === '/api/payment-rpc' || url.pathname === '/api/arc-rpc') {
       try {
         const body = await readJson(req)
-        const result = await forwardArcRpc(body)
+        const result = await forwardPaymentRpc(body)
         sendRawJson(res, 200, result)
       } catch (err) {
         sendRawJson(res, 200, rpcErrorResponse(null, err))
@@ -163,11 +165,12 @@ function sendRawJson (res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
-async function forwardArcRpc (body) {
+async function forwardPaymentRpc (body) {
+  if (paymentNetwork.kind !== 'evm') return rpcErrorResponse(body, new Error(`${paymentNetwork.name} does not use EVM JSON-RPC`))
   try {
-    return await postJson(ARC_RPC_PROXY_URL, body)
+    return await postJson(PAYMENT_RPC_PROXY_URL, body)
   } catch (err) {
-    log(`Arc RPC local proxy failed: ${err.message}`)
+    log(`${paymentNetwork.name} local RPC proxy failed: ${err.message}`)
     return rpcErrorResponse(body, err)
   }
 }
@@ -175,7 +178,7 @@ async function forwardArcRpc (body) {
 function rpcErrorResponse (body, err) {
   const error = {
     code: -32000,
-    message: `Arc RPC unavailable: ${err?.message || 'request failed'}`
+    message: `${paymentNetwork.name} RPC unavailable: ${err?.message || 'request failed'}`
   }
   if (Array.isArray(body)) return body.map(item => ({ jsonrpc: '2.0', id: item?.id ?? null, error }))
   return { jsonrpc: '2.0', id: body?.id ?? null, error }

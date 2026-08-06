@@ -16,7 +16,7 @@
         <div class="topbar-pills">
           <div class="launch-pill" id="launchStatus" title="Launch status">Launch: boot</div>
           <div class="balance-pill">
-            <span id="walletBalance">Balance: -- USDC</span>
+            <span id="walletBalance">Balance: -- BOT</span>
             <button type="button" id="refreshBalance" class="icon-button compact" title="Refresh balance" aria-label="Refresh balance">↻</button>
           </div>
           <div class="peer-pill" id="peerId">Peer: pending</div>
@@ -137,9 +137,11 @@
                 </div>
               </label>
               <label>Forwarding address <input id="forwardingAddress" placeholder="0x..."></label>
-              <label>Lightning address <input id="lightningAddress" placeholder="name@example.com"></label>
+              <label id="lightningAddressSetting" hidden>Lightning address <input id="lightningAddress" placeholder="name@example.com"></label>
               <label>Auto-forward threshold <input id="forwardThreshold" inputmode="decimal" placeholder="0.1"></label>
               <div class="actions">
+                <button type="button" id="openWalletExplorer" class="secondary">Open Explorer</button>
+                <button type="button" id="openPaymentFaucet" class="secondary">Get Test BOT</button>
                 <button type="button" id="savePaymentSettings">Save Payment Settings</button>
               </div>
               <div id="paymentStats" class="metrics"></div>

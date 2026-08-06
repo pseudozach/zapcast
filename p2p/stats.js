@@ -32,6 +32,7 @@ export class Metrics extends SimpleEmitter {
       chunkDestinations: {},
       missingChunks: 0,
       skippedChunks: 0,
+      streamPayment: null,
       rebufferCount: 0,
       rebufferDuration: 0,
       playbackState: 'idle',
