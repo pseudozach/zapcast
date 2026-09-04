@@ -17,6 +17,7 @@ let nostrStreams = []
 let nostrPage = 0
 let nostrDiscoveryLoading = false
 let lastNostrAnnouncement = null
+let viewerStreamId = ''
 const pendingRecords = []
 const playbackUi = {
   recordsSeen: 0,
@@ -113,6 +114,7 @@ function bindActions () {
     if (result.explorerUrl) setStatusLink('tipStatus', `Confirmed ${formatBotAndUsd(amount)} — view transaction`, result.explorerUrl)
   })))
   $('rtmpUrl')?.addEventListener('input', validateRtmpField)
+  $('streamIdIn')?.addEventListener('input', renderViewerStreamFromInput)
   $('tipAmount')?.addEventListener('input', renderPaymentConversions)
   $('forwardThreshold')?.addEventListener('input', renderPaymentConversions)
   onClick('startIngest', async () => run(async () => withBusy('startIngest', 'Starting...', async () => {
@@ -148,13 +150,7 @@ function bindActions () {
     render()
   })))
   onClick('joinStream', async () => run(async () => withBusy('joinStream', 'Joining...', async () => {
-    await app.joinStream($('streamIdIn').value.trim())
-    mse = new MsePlayer($('video'))
-    mse.onerror = err => app.reportError?.(err)
-    const started = await mse.start(app.status().config?.defaults?.mime || 'video/mp4; codecs="avc1.42c01e,mp4a.40.2"')
-    if (!started) throw new Error('This runtime does not support the ZapCast fMP4 playback codec.')
-    while (pendingRecords.length) appendRecord(pendingRecords.shift())
-    playbackUi.pendingRecords = 0
+    await joinViewerStream($('streamIdIn').value.trim())
   })))
   onClick('stopViewing', async () => run(async () => {
     await app.stopViewing()
@@ -164,6 +160,7 @@ function bindActions () {
     resetPlaybackUi()
     $('video').removeAttribute('src')
     $('video').load()
+    setViewerStreamMetadata('', null)
   }))
   onClick('applyTopology', () => {
     app.updateTopology({
@@ -486,6 +483,41 @@ function renderNostrStreams () {
   }
 }
 
+function renderViewerStreamFromInput () {
+  const streamId = $('streamIdIn')?.value.trim() || ''
+  const stream = nostrStreams.find(item => item.streamId === streamId) || null
+  if (stream) setViewerStreamMetadata(streamId, stream)
+  else setViewerStreamMetadata('', null)
+}
+
+function setViewerStreamMetadata (streamId, stream, { loading = false } = {}) {
+  viewerStreamId = streamId
+  const details = $('viewerStreamDetails')
+  const title = $('viewerStreamTitle')
+  const description = $('viewerStreamDescription')
+  if (!details || !title || !description) return
+
+  details.hidden = !streamId
+  if (!streamId) {
+    title.textContent = ''
+    description.textContent = ''
+    return
+  }
+
+  title.textContent = stream?.title || (loading ? 'Loading stream details…' : 'Live stream')
+  description.textContent = stream?.summary || (loading ? '' : 'No description was published for this stream.')
+}
+
+async function resolveViewerStreamMetadata (streamId) {
+  let stream = nostrStreams.find(item => item.streamId === streamId) || null
+  if (!stream && !nostrDiscoveryLoading) {
+    await refreshNostrStreams({ silent: true }).catch(() => {})
+    stream = nostrStreams.find(item => item.streamId === streamId) || null
+  }
+  if (viewerStreamId === streamId) setViewerStreamMetadata(streamId, stream)
+  return stream
+}
+
 function nostrStreamActionButton (stream) {
   const mine = stream.pubkey && nostrIdentity?.pubkey && stream.pubkey === nostrIdentity.pubkey
   if (mine) return `<button type="button" class="danger" data-stop-nostr-stream="${escapeHtml(stream.streamId)}">Stop</button>`
@@ -684,6 +716,8 @@ async function refreshNostrStreams ({ silent = false } = {}) {
     const nostrClient = await import('./vendor/nostr-client.js')
     const result = await nostrClient.discoverLiveStreams({ relays: identity.relays, limit: 50 })
     nostrStreams = result.streams
+    const viewerStream = nostrStreams.find(item => item.streamId === viewerStreamId)
+    if (viewerStream) setViewerStreamMetadata(viewerStreamId, viewerStream)
     nostrPage = 0
     setStatus('nostrDiscoveryStatus', nostrStreams.length ? `${nostrStreams.length} live ZapCast stream(s) found.` : 'No streams found.')
     return result
@@ -719,6 +753,14 @@ async function watchDiscoveredStream (streamId) {
   if (!streamId) throw new Error('Invalid Nostr event: missing ZapCast stream ID.')
   showTab('viewer')
   $('streamIdIn').value = streamId
+  const stream = nostrStreams.find(item => item.streamId === streamId) || null
+  await joinViewerStream(streamId, stream)
+}
+
+async function joinViewerStream (streamId, stream = null) {
+  if (!streamId) throw new Error('Enter a stream ID.')
+  setViewerStreamMetadata(streamId, stream || nostrStreams.find(item => item.streamId === streamId) || null, { loading: true })
+  const metadataRequest = resolveViewerStreamMetadata(streamId)
   await app.joinStream(streamId)
   mse = new MsePlayer($('video'))
   mse.onerror = err => app.reportError?.(err)
@@ -726,6 +768,7 @@ async function watchDiscoveredStream (streamId) {
   if (!started) throw new Error('This runtime does not support the ZapCast fMP4 playback codec.')
   while (pendingRecords.length) appendRecord(pendingRecords.shift())
   playbackUi.pendingRecords = 0
+  void metadataRequest
 }
 
 async function ensureWallet () {

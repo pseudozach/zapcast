@@ -522,8 +522,36 @@ button.danger:disabled {
 }
 
 .tip-row button {
-  height: 38px;
+  align-self: end;
+  min-width: 138px;
+  min-height: 66px;
+  height: auto;
   white-space: nowrap;
+}
+
+.viewer-stream-details {
+  margin-top: 18px;
+}
+
+.viewer-stream-details[hidden] {
+  display: none;
+}
+
+.viewer-stream-details h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.viewer-stream-details p {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.viewer-stream-details + video {
+  margin-top: 12px;
 }
 
 .secret-row input {
