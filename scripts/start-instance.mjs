@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { build } from 'esbuild'
 import { postJson } from '../utils/http-json.js'
 import { getPaymentNetwork } from '../payments/networks.js'
+import { getBotPrice } from '../payments/bot-price.js'
 
 const PORT = 43741
 const PREFIX = '[zapcast-launcher]'
@@ -42,11 +43,20 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (req.url === '/payment-rpc' || req.url === '/arc-rpc') {
+  if (req.url === '/payment-rpc') {
     readJson(req).then(forwardPaymentRpc).then(result => {
       sendJson(res, 200, result)
     }, err => {
       sendJson(res, 200, rpcErrorResponse(null, err))
+    })
+    return
+  }
+
+  if (req.url === '/bot-price') {
+    getBotPrice().then(result => {
+      sendJson(res, 200, result)
+    }, err => {
+      sendJson(res, 502, { error: err?.message || String(err) })
     })
     return
   }
@@ -110,7 +120,7 @@ function resolvePearExecutable () {
 }
 
 async function buildBrowserClients () {
-  log('building browser wallet, Nostr, and QR bundles')
+  log('building browser wallet and Nostr bundles')
   const common = {
     bundle: true,
     format: 'esm',
@@ -129,11 +139,6 @@ async function buildBrowserClients () {
     ...common,
     entryPoints: ['ui/nostr-client.js'],
     outfile: 'ui/vendor/nostr-client.js'
-  })
-  await build({
-    ...common,
-    entryPoints: ['ui/qr-client.js'],
-    outfile: 'ui/vendor/qr-client.js'
   })
 }
 

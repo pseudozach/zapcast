@@ -10,6 +10,6 @@ test('ffmpeg ingest requires video and optionally maps audio', () => {
     chunkDurationSeconds: 2
   })
   assert.deepEqual(args.slice(args.indexOf('-map'), args.indexOf('-map') + 4), ['-map', '0:v:0', '-map', '0:a:0?'])
-  assert.ok(args.includes('-analyzeduration'))
-  assert.ok(args.includes('-probesize'))
+  assert.equal(args[args.indexOf('-analyzeduration') + 1], '30000000')
+  assert.equal(args[args.indexOf('-probesize') + 1], '30000000')
 })

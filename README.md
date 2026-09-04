@@ -12,7 +12,7 @@ ZapCast is a Pear desktop MVP for viewer-funded peer-to-peer live streaming. A s
 - Automatically keep a rolling 300 chunk relay cache.
 - Exchange debug control messages: `hello`, `have`, `want`, `stats`, and `topology`.
 - Apply allowlist, blocklist, preferred relay, direct broadcaster denial, and broadcaster connection limit controls.
-- Generate a local self-custodial EVM wallet, advertise broadcaster payment metadata, and send viewer tips over BOTChain Testnet by default.
+- Generate a local self-custodial EVM wallet, advertise broadcaster payment metadata, and send viewer tips over BOTChain Mainnet by default.
 - Announce and discover live ZapCast streams through Nostr NIP-53 kind 30311 events.
 - Track broadcaster/viewer metrics, payment settings, and export JSON/CSV debug reports.
 - Clean per-instance temporary stream data on app shutdown.
@@ -59,6 +59,8 @@ OBS should publish to the RTMP endpoint you provide. ZapCast does not implement 
 
 When streaming starts, ZapCast generates the stream keypair/feed ID automatically.
 
+The Start action remains in a connecting state until ffmpeg produces and ZapCast appends the first media segment. Only then does stream uptime begin and the Nostr live announcement publish. RTMP input is probed for up to 30 seconds so a subscriber joining between video keyframes does not mistake an audio-first stream for an audio-only source. If ffmpeg exits early or the source produces no segment within 45 seconds, the Streamer panel reports the source/ffmpeg failure instead of presenting an empty stream as live.
+
 ## Nostr Discovery
 
 ZapCast uses Nostr for discovery only. Video chunks still move over Hypercore/Hyperswarm; Nostr relays only carry signed live stream announcements that point to existing ZapCast stream IDs.
@@ -75,7 +77,7 @@ Default relays:
 
 To announce a stream, create/start a stream in `Streamer`, set the title and description, then click `Announce on Nostr`. When the stream is stopped from the app, ZapCast publishes an updated `kind:30311` event with the same `d` tag and `status=ended`.
 
-Each machine gets a separate local Nostr keypair stored under `data/nostr` in the app data directory. This key is not the payment wallet key and not the Hypercore/Hyperswarm stream key. In `Settings`, the Nostr Identity card shows the `npub`, lets you copy it, keeps the generated `nsec` hidden behind a reveal button, allows replacing it with an imported `nsec` or 64-character private key, and lets you edit the relay list.
+Each stable instance slot gets a separate local Nostr keypair stored under `data/nostr/slots/slot-N` in the app data directory, matching the wallet-slot model. On first use after upgrading, slot 1 copies the previous `data/nostr/nostr.json` identity into its slot without deleting or modifying the legacy file; later slots generate and persist independent identities. These keys are not payment wallet keys or Hypercore/Hyperswarm stream keys. In `Settings`, the Nostr Identity card shows the slot's `npub`, lets you copy it, keeps the generated `nsec` hidden behind a reveal button, allows replacing it with an imported `nsec` or 64-character private key, and lets you edit the relay list.
 
 The Home screen queries configured relays for `{ kinds: [30311], "#t": ["zapcast"], limit: 50 }`, filters live ZapCast events client-side, and can auto-fill/join a selected stream.
 
@@ -85,7 +87,7 @@ The Home screen queries configured relays for `{ kinds: [30311], "#t": ["zapcast
 2. Go to `Viewer`.
 3. Paste the stream ID.
 4. Click `Join Stream`.
-5. To tip the broadcaster, enter a BOT amount and click `Tip Broadcaster`.
+5. To tip the broadcaster, enter a BOT amount and click `Tip Broadcaster`. The default is `0.01 BOT`, approximately `$0.10` at a BOT price near `$10`.
 
 The viewer joins the stream topic, replicates the Hypercore feed, buffers records, and relays available chunks to peers through normal Hypercore replication.
 
@@ -93,7 +95,9 @@ The viewer joins the stream topic, replicates the Hypercore feed, buffers record
 
 Each app instance gets a local self-custodial EVM wallet generated with `viem` in the Electron renderer. The Pear/Bare backend persists the wallet metadata and transfer receipts, but does not import viem directly. The wallet address is shown in `Settings`; the mnemonic is hidden until you reveal it. Back it up before funding the wallet.
 
-BOTChain Testnet is the default payment network. ZapCast checks native BOT balances, estimates gas, sends native BOT tips, waits for confirmation, and links receipts to BOTScan. Broadcasters publish only their public network, chain ID, asset, and recipient in stream/control metadata, so viewers never enter a recipient manually. Test BOT is available from the [official faucet](https://faucet.botchain.ai/basic).
+BOTChain Mainnet is the default payment network. ZapCast checks the configured RPC chain ID, reads native BOT balances, estimates gas, sends native BOT tips, waits for confirmation, and links receipts to the matching BOTScan explorer. Broadcasters publish only their public network, chain ID, asset, and recipient in stream/control metadata, so viewers never enter a recipient manually.
+
+The app reads the live `BOTUSDT` price from Coinstore in the background and shows subtle approximate USD equivalents beside mainnet BOT balances, tip amounts, gas estimates, and forwarding thresholds. It does not present market-price trading UI. The conversion rate is cached for one minute; if the endpoint is temporarily unavailable, the UI marks its last-known fallback conversion as an estimate. Testnet BOT is never assigned a USD value. Override the endpoint with `ZAPCAST_BOT_PRICE_URL` if necessary.
 
 The active network comes from one optional environment variable. For local development, copy the maintained example file and edit its single value:
 
@@ -102,19 +106,25 @@ cp .env.example .env
 npm run start:desktop
 ```
 
-Both `npm start` and `npm run start:desktop` load `.env` automatically when it exists. A shell environment variable can also be supplied directly:
+Both `npm start` and `npm run start:desktop` load `.env` automatically when it exists. A shell environment variable can select either supported network directly:
 
 ```sh
-ZAPCAST_PAYMENT_NETWORK=botchain-mainnet npm run start:desktop
+ZAPCAST_PAYMENT_NETWORK=botchain-testnet npm run start:desktop
 ```
 
-Supported values are `botchain-testnet`, `botchain-mainnet`, `arc-testnet`, and `lightning`. If the variable or `.env` file is omitted, ZapCast uses `botchain-testnet`. The local `.env` file is ignored by Git; `.env.example` is committed and should be updated whenever supported configuration changes. Packaged applications use operating-system environment variables and default to BOTChain Testnet when none is provided. Switching to BOTChain Mainnet requires no payment code or wallet migration. Existing Arc wallet files are not overwritten, and Arc Testnet or Lightning is not advertised as active unless selected.
+Supported values are only `botchain-mainnet` and `botchain-testnet`. If the variable or `.env` file is omitted, ZapCast uses `botchain-mainnet`. The local `.env` file is ignored by Git; `.env.example` is committed and should be updated whenever supported configuration changes. Packaged applications use operating-system environment variables and default to BOTChain Mainnet when none is provided. Both networks use the same EVM wallet address, but balances and transaction histories are independent.
+
+| Environment | Chain ID | RPC | Native token | Explorer |
+| --- | ---: | --- | --- | --- |
+| BOTChain Mainnet (default) | 677 | `https://rpc.botchain.ai` | BOT | `https://scan.botchain.ai` |
+| BOTChain Testnet | 968 | `https://rpc.bohr.life` | BOT | `https://scan.bohr.life` |
+
+Test BOT is available from the [official faucet](https://faucet.botchain.ai/basic). Testnet BOT has no mainnet value and cannot pay mainnet transaction fees.
 
 Optional forwarding settings:
 
 - `Forwarding address`: your main wallet address.
 - `Auto-forward threshold`: when the app wallet balance reaches this amount of the active EVM asset, ZapCast forwards the spendable balance after reserving the network fee and records the confirmed transfer in `data/wallet/transfers.csv`.
-- `Lightning address`: shown and advertised only when `ZAPCAST_PAYMENT_NETWORK=lightning` is selected. Viewers then see it below the video with a copy button and QR code.
 
 Persistent wallets are stored by wallet slot under `data/wallet/slots/`. Temporary stream chunks, Corestore data, playback buffers, and per-instance reports are stored under `tmp/creator/<instance-id>/` or `tmp/viewer/<instance-id>/` and are cleaned up when the app closes. Packaged builds place these directories in the operating system's ZapCast application-data directory, not beside the installed executable.
 
@@ -208,7 +218,7 @@ ui/           browser-side JS and CSS used by index.html
 broadcaster/  ffmpeg ingest and chunk watcher
 player/       MSE and ffplay fallback helpers
 p2p/          swarm, feed replication, control protocol, topology, stats
-payments/     wallet, transfer ledger, and mock split helpers
+payments/     BOTChain network config, wallet persistence, and transfer ledger
 reports/      JSON and CSV exports
 utils/        crypto, logging, time helpers
 ```

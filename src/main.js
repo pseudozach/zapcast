@@ -3,12 +3,13 @@ import Bridge from 'pear-bridge'
 import { ZapCastApp } from './app-controller.js'
 import { DEFAULTS } from './config.js'
 import { fsPromises, joinPath } from '../utils/platform.js'
-import { postJson } from '../utils/http-json.js'
+import { getJson, postJson } from '../utils/http-json.js'
 import { getPaymentNetwork } from '../payments/networks.js'
 
 const WINDOW_COMMANDS_FILE = joinPath(DEFAULTS.dataDirectory, 'window-commands.jsonl')
 const paymentNetwork = getPaymentNetwork()
 const PAYMENT_RPC_PROXY_URL = 'http://127.0.0.1:43741/payment-rpc'
+const BOT_PRICE_PROXY_URL = 'http://127.0.0.1:43741/bot-price'
 
 const runtime = new Runtime()
 log('runtime created')
@@ -45,13 +46,22 @@ function attachApi (bridge, apps) {
       return staticHandler.call(bridge.server, req, res)
     }
 
-    if (url.pathname === '/api/payment-rpc' || url.pathname === '/api/arc-rpc') {
+    if (url.pathname === '/api/payment-rpc') {
       try {
         const body = await readJson(req)
         const result = await forwardPaymentRpc(body)
         sendRawJson(res, 200, result)
       } catch (err) {
         sendRawJson(res, 200, rpcErrorResponse(null, err))
+      }
+      return
+    }
+
+    if (url.pathname === '/api/bot-price') {
+      try {
+        sendJson(res, 200, { ok: true, result: await getJson(BOT_PRICE_PROXY_URL) })
+      } catch (err) {
+        sendJson(res, 502, { ok: false, error: err?.message || String(err) })
       }
       return
     }
@@ -119,8 +129,6 @@ async function dispatchApi (app, pathname, body, url) {
       return await app.status()
     case '/api/topology':
       return app.updateTopology(body)
-    case '/api/zap':
-      return app.zap(body.sats || 1000)
     case '/api/tip':
       return app.tipBroadcaster(body)
     case '/api/payment-settings':

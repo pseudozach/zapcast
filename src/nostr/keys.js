@@ -6,8 +6,10 @@ const NOSTR_FILE = 'nostr.json'
 const HEX_32 = /^[0-9a-f]{64}$/i
 
 export class NostrIdentityStore {
-  constructor ({ directory = DEFAULTS.nostrDirectory, logger } = {}) {
+  constructor ({ directory = DEFAULTS.nostrDirectory, legacyDirectory = '', slot = 1, logger } = {}) {
     this.directory = directory
+    this.legacyDirectory = legacyDirectory
+    this.slot = Number(slot) || 1
     this.logger = logger
     this.identity = null
   }
@@ -59,6 +61,29 @@ export class NostrIdentityStore {
   async read (fs) {
     try {
       return normalizeIdentity(JSON.parse(await fs.readFile(joinPath(this.directory, NOSTR_FILE), 'utf8')))
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        if (this.slot === 1 && this.legacyDirectory) return this.migrateLegacyIdentity(fs)
+        return normalizeIdentity({})
+      }
+      throw err
+    }
+  }
+
+  async migrateLegacyIdentity (fs) {
+    const legacyFile = joinPath(this.legacyDirectory, NOSTR_FILE)
+    try {
+      const source = await fs.readFile(legacyFile, 'utf8')
+      const identity = normalizeIdentity(JSON.parse(source))
+      await fs.mkdir(this.directory, { recursive: true })
+      try {
+        await fs.writeFile(joinPath(this.directory, NOSTR_FILE), source, { flag: 'wx', mode: 0o600 })
+      } catch (err) {
+        if (err.code !== 'EEXIST') throw err
+        return normalizeIdentity(JSON.parse(await fs.readFile(joinPath(this.directory, NOSTR_FILE), 'utf8')))
+      }
+      this.logger?.add('nostr_key_restored', { message: `slot ${this.slot}: ${identity.npub || shortKey(identity.pubkey)}` })
+      return identity
     } catch (err) {
       if (err.code === 'ENOENT') return normalizeIdentity({})
       throw err

@@ -40079,6 +40079,7 @@ function walletFromMnemonic(mnemonic) {
 async function getNativeBalance({ address, network }) {
   const config = requireEvmNetwork(network);
   const client = publicClient(config);
+  await assertConfiguredChain(client, config);
   const value = await client.getBalance({ address });
   return {
     raw: value.toString(),
@@ -40090,6 +40091,7 @@ async function estimateNativeTransfer({ mnemonic, to, amount, network }) {
   const config = requireEvmNetwork(network);
   const account = mnemonicToAccount(mnemonic);
   const client = publicClient(config);
+  await assertConfiguredChain(client, config);
   const value = parseUnits(String(amount), config.decimals);
   if (value <= 0n) throw new Error(`Tip amount must be greater than zero ${config.asset}.`);
   const [gas, gasPrice] = await Promise.all([
@@ -40111,6 +40113,7 @@ async function sendNativeTransfer({ mnemonic, to, amount, network, onSubmitted }
   const transport = http(PAYMENT_RPC_PROXY);
   const walletClient = createWalletClient({ account, chain: chain2, transport });
   const client = createPublicClient({ chain: chain2, transport });
+  await assertConfiguredChain(client, config);
   const txHash = await walletClient.sendTransaction({
     to,
     value: parseUnits(String(amount), config.decimals)
@@ -40127,6 +40130,7 @@ async function forwardNativeBalance({ mnemonic, to, network, onSubmitted }) {
   const chain2 = viemChain(config);
   const transport = http(PAYMENT_RPC_PROXY);
   const client = createPublicClient({ chain: chain2, transport });
+  await assertConfiguredChain(client, config);
   const balance = await client.getBalance({ address: account.address });
   const [gas, gasPrice] = await Promise.all([
     client.estimateGas({ account: account.address, to, value: balance / 2n }),
@@ -40148,10 +40152,14 @@ async function forwardNativeBalance({ mnemonic, to, network, onSubmitted }) {
     amount: formatUnits(value, config.decimals)
   };
 }
-var getNativeUsdcBalance = getNativeBalance;
-var sendNativeUsdc = sendNativeTransfer;
 function publicClient(config) {
   return createPublicClient({ chain: viemChain(config), transport: http(PAYMENT_RPC_PROXY) });
+}
+async function assertConfiguredChain(client, config) {
+  const actualChainId = await client.getChainId();
+  if (actualChainId !== config.chainId) {
+    throw new Error(`${config.name} RPC returned chain ID ${actualChainId}; expected ${config.chainId}. Transaction cancelled.`);
+  }
 }
 function requireEvmNetwork(network) {
   if (!network || network.kind !== "evm" || !Number.isInteger(network.chainId)) {
@@ -40181,8 +40189,6 @@ export {
   forwardNativeBalance,
   generateWallet,
   getNativeBalance,
-  getNativeUsdcBalance,
   sendNativeTransfer,
-  sendNativeUsdc,
   walletFromMnemonic
 };

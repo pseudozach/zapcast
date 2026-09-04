@@ -21,9 +21,3 @@ await build({
   entryPoints: ['ui/nostr-client.js'],
   outfile: 'ui/vendor/nostr-client.js'
 })
-
-await build({
-  ...common,
-  entryPoints: ['ui/qr-client.js'],
-  outfile: 'ui/vendor/qr-client.js'
-})

@@ -6,6 +6,8 @@ let mse = null
 let loadedNostrSecret = ''
 let walletBalance = null
 let balanceRefreshing = false
+let botMarket = null
+let botPriceRefreshing = false
 let autoForwarding = false
 let walletAddressCopied = false
 let walletAddressCopyTimer = null
@@ -15,7 +17,6 @@ let nostrStreams = []
 let nostrPage = 0
 let nostrDiscoveryLoading = false
 let lastNostrAnnouncement = null
-let lightningQrAddress = ''
 const pendingRecords = []
 const playbackUi = {
   recordsSeen: 0,
@@ -35,6 +36,7 @@ setLaunchStatus('boot')
 render()
 runStartup()
 setInterval(render, 1000)
+setInterval(() => refreshBotPrice({ silent: true }).catch(() => {}), 60_000)
 setInterval(reportPlaybackState, 1000)
 
 app.on('metrics', render)
@@ -68,9 +70,10 @@ function bindActions () {
   onClick('copyAllMetrics', () => copyText(JSON.stringify(app.status().metrics, null, 2)))
   onClick('copyChunkSources', () => copyText(JSON.stringify(app.status().metrics.chunkSources || {}, null, 2)))
   onClick('copyEventLog', () => copyText(eventLogText()))
-  onClick('copyLightningAddress', () => copyButtonText('copyLightningAddress', broadcasterLightningAddress()))
   onClick('revealWallet', async () => run(async () => revealWalletSecret()))
-  onClick('refreshBalance', async () => run(async () => refreshWalletBalance()))
+  onClick('refreshBalance', async () => run(async () => {
+    await Promise.all([refreshWalletBalance(), refreshBotPrice({ silent: true })])
+  }))
   onClick('openWalletExplorer', () => openExternal(activeWallet().explorerBaseUrl))
   onClick('openPaymentFaucet', () => openExternal(activeWallet().faucetUrl))
   onClick('refreshNostrStreams', async () => run(async () => refreshNostrStreams()))
@@ -94,7 +97,6 @@ function bindActions () {
     }
     const wallet = await app.updatePaymentSettings({
       forwardingAddress: $('forwardingAddress').value.trim(),
-      lightningAddress: $('lightningAddress').value.trim(),
       forwardThreshold: $('forwardThreshold').value.trim()
     })
     renderWallet(wallet)
@@ -107,22 +109,37 @@ function bindActions () {
     const amount = $('tipAmount').value.trim()
     const recipient = broadcasterPaymentAddress()
     const result = await sendTip({ amount, to: recipient })
-    setStatus('tipStatus', `Confirmed: ${result.txHash}`)
-    if (result.explorerUrl) setStatusLink('tipStatus', 'Confirmed — view transaction', result.explorerUrl)
+    setStatus('tipStatus', `Confirmed ${formatBotAndUsd(amount)}: ${result.txHash}`)
+    if (result.explorerUrl) setStatusLink('tipStatus', `Confirmed ${formatBotAndUsd(amount)} — view transaction`, result.explorerUrl)
   })))
   $('rtmpUrl')?.addEventListener('input', validateRtmpField)
+  $('tipAmount')?.addEventListener('input', renderPaymentConversions)
+  $('forwardThreshold')?.addEventListener('input', renderPaymentConversions)
   onClick('startIngest', async () => run(async () => withBusy('startIngest', 'Starting...', async () => {
-    validateRtmpField({ strict: true })
-    if (!$('rtmpUrl').value.trim()) {
-      throw new Error('Enter a source URL.')
+    let started = false
+    try {
+      validateRtmpField({ strict: true })
+      if (!$('rtmpUrl').value.trim()) {
+        throw new Error('Enter a source URL.')
+      }
+      const stream = await app.createStream()
+      $('streamIdOut').value = stream.streamId
+      lastNostrAnnouncement = null
+      setStatus('nostrPublishStatus', 'Connecting to the media source and waiting for the first segment…')
+      await app.startIngest({
+        rtmpUrl: $('rtmpUrl').value.trim()
+      })
+      started = true
+    } catch (err) {
+      setStatus('nostrPublishStatus', `Stream did not start: ${err?.message || String(err)}`)
+      throw err
     }
-    const stream = await app.createStream()
-    $('streamIdOut').value = stream.streamId
-    lastNostrAnnouncement = null
-    await app.startIngest({
-      rtmpUrl: $('rtmpUrl').value.trim()
-    })
-    await maybeAnnounceStartedStream()
+    if (started) {
+      await maybeAnnounceStartedStream().catch(async err => {
+        setStatus('nostrPublishStatus', `Streaming, but Nostr announcement failed: ${err?.message || String(err)}`)
+        await app.reportError?.(err)
+      })
+    }
   })))
   onClick('stopIngest', async () => run(async () => withBusy('stopIngest', 'Stopping...', async () => {
     const announcement = lastNostrAnnouncement
@@ -224,6 +241,7 @@ async function runStartup () {
     ['backend', () => app.ready],
     ['wallet', () => ensureWallet()],
     ['nostr key', () => ensureNostrIdentity()],
+    ['BOT price', () => refreshBotPrice({ silent: true })],
     ['balance', () => refreshWalletBalance({ silent: true })],
     ['nostr live', () => refreshNostrStreams({ silent: true })]
   ]
@@ -268,6 +286,7 @@ function render () {
   const status = app.status()
   $('peerId').textContent = `Peer: ${short(status.metrics.peerId) || 'pending'}`
   renderBalance()
+  renderPaymentConversions()
   renderNostrIdentity(nostrIdentity || status.nostr)
   renderNostrRefreshButton()
   renderNostrStreams()
@@ -277,14 +296,12 @@ function render () {
   renderMetrics($('broadcasterMetrics'), status.metrics, ['streamId', 'uptime', 'chunksProduced', 'chunksAppended', 'uploadMbps', 'connectedPeers', 'bytesServed', 'chunksServed'])
   renderMetrics($('viewerMetrics'), status.metrics, ['streamId', 'uptime', 'connectedToBroadcaster', 'playbackState', 'liveLatency', 'bufferSize', 'currentSequence', 'latestSequence', 'bytesDownloaded', 'bytesUploaded', 'uploadDownloadRatio', 'chunksReceived', 'chunksServed', 'missingChunks', 'skippedChunks', 'playbackDebug'])
   renderMetrics($('allMetrics'), status.metrics)
-  renderPayments(status.payments)
   renderWallet(status.wallet || status.metrics.wallet)
   $('ffmpegStatus').textContent = JSON.stringify(status.ffmpeg, null, 2)
   const lastError = status.metrics.errors?.at?.(-1)
   if (lastError && !status.ffmpeg.error) {
     $('ffmpegStatus').textContent = `${$('ffmpegStatus').textContent}\n\nLast error: ${lastError.message}`
   }
-  renderLightningReceive(status.metrics.connectedPeers)
   renderPeers(status.metrics.connectedPeers)
   renderSources(status.metrics.chunkSources)
   renderEvents(status.events)
@@ -389,10 +406,6 @@ function renderMetrics (node, metrics, keys = Object.keys(metrics)) {
   }
 }
 
-function renderPayments (payments) {
-  renderMetrics($('paymentStats'), payments || {}, ['streamerPendingSats', 'relayerPendingSats', 'protocolPendingSats', 'currentUserPendingSats'])
-}
-
 function renderNostrIdentity (identity = {}) {
   if (!identity) return
   nostrIdentity = identity
@@ -479,35 +492,6 @@ function nostrStreamActionButton (stream) {
   return `<button type="button" class="secondary" data-watch-stream="${escapeHtml(stream.streamId)}">Watch</button>`
 }
 
-async function renderLightningReceive (peers = []) {
-  const card = $('lightningReceive')
-  const input = $('viewerLightningAddress')
-  const qr = $('lightningQr')
-  if (!card || !input || !qr) return
-
-  const directPayment = peers.find(peer => peer.role === 'broadcaster')?.payment
-  const payment = directPayment || app.status().metrics.streamPayment
-  const address = payment?.network === 'lightning' ? payment.recipient || '' : ''
-  card.hidden = !address
-  input.value = address
-  if ($('copyLightningAddress')) $('copyLightningAddress').disabled = !address
-  if (!address) {
-    lightningQrAddress = ''
-    qr.removeAttribute('src')
-    return
-  }
-  if (lightningQrAddress === address && qr.getAttribute('src')) return
-
-  lightningQrAddress = address
-  try {
-    const qrClient = await import('./vendor/qr-client.js')
-    qr.src = await qrClient.lightningAddressQrDataUrl(address)
-  } catch (err) {
-    qr.removeAttribute('src')
-    await app.reportError?.(err)
-  }
-}
-
 function renderBalance () {
   const label = $('walletBalance')
   const refresh = $('refreshBalance')
@@ -515,10 +499,10 @@ function renderBalance () {
   if (walletBalance?.error) {
     label.textContent = 'Balance: unavailable'
   } else if (walletBalance) {
-    label.textContent = `Balance: ${formatBalance(walletBalance.formatted)} ${walletBalance.symbol || activeWallet().asset || 'BOT'}`
+    label.textContent = `Balance: ${formatBotAndUsd(walletBalance.formatted, walletBalance.symbol || activeWallet().asset || 'BOT')}`
   } else {
     const wallet = activeWallet()
-    label.textContent = wallet.paymentKind === 'lightning' ? 'Payments: Lightning' : `Balance: -- ${wallet.asset || 'BOT'}`
+    label.textContent = `Balance: -- ${wallet.asset || 'BOT'}`
   }
   if (refresh) {
     refresh.disabled = balanceRefreshing || !walletAddress() || activeWallet().paymentKind !== 'evm'
@@ -531,7 +515,7 @@ function renderWallet (wallet = {}) {
   if (!details) return
   if (wallet.error) {
     renderMetrics(details, {
-      network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+      network: wallet.networkName || wallet.network || 'BOTChain Mainnet',
       asset: wallet.asset || 'BOT',
       status: 'wallet unavailable',
       error: wallet.error
@@ -540,14 +524,14 @@ function renderWallet (wallet = {}) {
   }
   if (!wallet.address) {
     renderMetrics(details, {
-      network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+      network: wallet.networkName || wallet.network || 'BOTChain Mainnet',
       asset: wallet.asset || 'BOT',
       status: 'generating wallet...'
     })
     return
   }
   renderMetrics(details, {
-    network: wallet.networkName || wallet.network || 'BOTChain Testnet',
+    network: wallet.networkName || wallet.network || 'BOTChain Mainnet',
     chainId: wallet.chainId ?? 'n/a',
     asset: wallet.asset || 'BOT',
     address: wallet.address || ''
@@ -558,9 +542,7 @@ function renderWallet (wallet = {}) {
     $('openPaymentFaucet').hidden = !wallet.faucetUrl
     $('openPaymentFaucet').disabled = !wallet.faucetUrl
   }
-  if ($('lightningAddressSetting')) $('lightningAddressSetting').hidden = wallet.paymentKind !== 'lightning'
   if ($('forwardingAddress') && document.activeElement !== $('forwardingAddress')) $('forwardingAddress').value = wallet.forwardingAddress || ''
-  if ($('lightningAddress') && document.activeElement !== $('lightningAddress')) $('lightningAddress').value = wallet.lightningAddress || ''
   if ($('forwardThreshold') && document.activeElement !== $('forwardThreshold')) $('forwardThreshold').value = wallet.forwardThreshold || '0.1'
 }
 
@@ -680,28 +662,8 @@ async function maybeAnnounceStartedStream () {
     setStatus('nostrPublishStatus', 'Nostr auto-announce skipped: no Nostr secret configured.')
     return null
   }
-  setStatus('nostrPublishStatus', 'Waiting for first video segment before announcing on Nostr...')
-  const ready = await waitForStreamAppend()
-  if (!ready) {
-    setStatus('nostrPublishStatus', 'Nostr auto-announce delayed: no stream segments have been appended yet.')
-    return null
-  }
+  setStatus('nostrPublishStatus', 'First media segment ready. Announcing on Nostr…')
   return announceOnNostr()
-}
-
-async function waitForStreamAppend ({ timeoutMs = 20000, intervalMs = 500 } = {}) {
-  const started = Date.now()
-  while (Date.now() - started < timeoutMs) {
-    await app.poll?.()
-    const metrics = app.status().metrics || {}
-    if (Number(metrics.chunksAppended || 0) > 0 || Number(metrics.latestSequence || 0) > 0) return true
-    await sleep(intervalMs)
-  }
-  return false
-}
-
-function sleep (ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function publishNostrEnded ({ streamId, title = 'zapcast live stream', description = '' }) {
@@ -804,6 +766,42 @@ async function refreshWalletBalance ({ silent = false } = {}) {
     renderBalance()
     updateViewingButtons(app.status())
   }
+}
+
+async function refreshBotPrice ({ silent = false } = {}) {
+  if (botPriceRefreshing) return botMarket
+  botPriceRefreshing = true
+  try {
+    botMarket = await app.botPrice()
+    return botMarket
+  } catch (err) {
+    if (!silent) throw err
+    return botMarket
+  } finally {
+    botPriceRefreshing = false
+    renderPaymentConversions()
+  }
+}
+
+function renderPaymentConversions () {
+  const tip = $('tipUsdValue')
+  const threshold = $('forwardThresholdUsd')
+  const testnet = Boolean(activeWallet().testnet)
+  if (testnet) {
+    if (tip) tip.textContent = 'Test BOT has no USD value.'
+    if (threshold) threshold.textContent = 'Test BOT has no USD value.'
+    return
+  }
+
+  if (tip) tip.textContent = conversionLabel($('tipAmount')?.value)
+  if (threshold) threshold.textContent = conversionLabel($('forwardThreshold')?.value)
+}
+
+function conversionLabel (botAmount) {
+  const price = currentBotUsdPrice()
+  const amount = Number(botAmount)
+  if (!price || !Number.isFinite(amount)) return 'USD estimate unavailable'
+  return `≈ ${formatUsd(amount * price)}${botMarket?.stale ? ' (estimate)' : ''}`
 }
 
 function renderPeers (peers = []) {
@@ -991,7 +989,7 @@ async function sendTip ({ amount, to }) {
   let submitted = null
   try {
     const estimate = await walletClient.estimateNativeTransfer({ mnemonic: wallet.mnemonic, to, amount, network })
-    setStatus('tipStatus', `Estimated gas: ${formatBalance(estimate.feeFormatted)} ${estimate.symbol}. Sending...`)
+    setStatus('tipStatus', `Estimated gas: ${formatBotAndUsd(estimate.feeFormatted, estimate.symbol)}. Sending...`)
     const result = await walletClient.sendNativeTransfer({
       mnemonic: wallet.mnemonic,
       to,
@@ -999,8 +997,8 @@ async function sendTip ({ amount, to }) {
       network,
       onSubmitted: transaction => {
         submitted = transaction
-        setStatus('tipStatus', `Pending: ${transaction.txHash}`)
-        if (transaction.explorerUrl) setStatusLink('tipStatus', 'Pending — view transaction', transaction.explorerUrl)
+        setStatus('tipStatus', `Pending ${formatBotAndUsd(amount)}: ${transaction.txHash}`)
+        if (transaction.explorerUrl) setStatusLink('tipStatus', `Pending ${formatBotAndUsd(amount)} — view transaction`, transaction.explorerUrl)
       }
     })
     await app.recordTransfer({
@@ -1037,11 +1035,6 @@ function broadcasterPaymentAddress () {
   return broadcasterPayment()?.recipient || ''
 }
 
-function broadcasterLightningAddress () {
-  const payment = broadcasterPayment()
-  return payment?.network === 'lightning' ? payment.recipient || '' : ''
-}
-
 function broadcasterPayment () {
   const peers = app.status().metrics.connectedPeers || []
   const payment = peers.find(peer => peer.role === 'broadcaster')?.payment || app.status().metrics.streamPayment
@@ -1069,7 +1062,7 @@ function paymentNetworkConfig (wallet = activeWallet()) {
     asset: wallet.asset,
     decimals: wallet.decimals,
     explorerUrl: wallet.explorerBaseUrl,
-    testnet: Boolean(wallet.faucetUrl)
+    testnet: Boolean(wallet.testnet)
   }
 }
 
@@ -1146,6 +1139,27 @@ function formatBalance (value) {
   if (number === 0) return '0'
   if (number < 0.000001) return '<0.000001'
   return number.toLocaleString(undefined, { maximumFractionDigits: 6 })
+}
+
+function currentBotUsdPrice () {
+  const price = Number(botMarket?.priceUsd)
+  return Number.isFinite(price) && price > 0 ? price : 0
+}
+
+function formatBotAndUsd (value, symbol = 'BOT') {
+  const bot = `${formatBalance(value)} ${symbol}`
+  if (Boolean(activeWallet().testnet)) return bot
+  const price = currentBotUsdPrice()
+  const amount = Number(value)
+  if (!price || !Number.isFinite(amount)) return bot
+  return `${bot} (≈ ${formatUsd(amount * price)})`
+}
+
+function formatUsd (value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return '$--'
+  if (amount > 0 && amount < 0.01) return '<$0.01'
+  return amount.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 }
 
 function delay (ms) {

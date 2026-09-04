@@ -8,7 +8,6 @@ import { ZapSwarm } from '../p2p/swarm.js'
 import { attachReplication } from '../p2p/replication.js'
 import { PeerControl } from '../p2p/peer-control.js'
 import { IngestPipeline } from '../broadcaster/ingest.js'
-import { splitZap } from '../payments/mock-split.js'
 import { PaymentWallet } from '../payments/wallet.js'
 import { exportCsvEvents, exportJsonReport } from '../reports/report.js'
 import { SimpleEmitter } from '../utils/emitter.js'
@@ -36,7 +35,7 @@ export class ZapCastApp extends SimpleEmitter {
     this.swarm = null
     this.control = null
     this.ingest = null
-    this.payments = splitZap({ sats: 0 })
+    this.payments = {}
     this.paymentNetwork = getPaymentNetwork()
     this.wallet = new PaymentWallet({
       directory: joinPath(DEFAULTS.walletDirectory, 'slots', `slot-${this.walletSlot}`),
@@ -48,7 +47,9 @@ export class ZapCastApp extends SimpleEmitter {
     this.walletError = ''
     this.walletReady = this.initWallet()
     this.nostr = new NostrIdentityStore({
-      directory: DEFAULTS.nostrDirectory,
+      directory: joinPath(DEFAULTS.nostrDirectory, 'slots', `slot-${this.walletSlot}`),
+      legacyDirectory: DEFAULTS.nostrDirectory,
+      slot: this.walletSlot,
       logger: this.eventLog
     })
     this.nostrReady = this.nostr.ready()
@@ -112,6 +113,7 @@ export class ZapCastApp extends SimpleEmitter {
     await this.prepareRole('broadcaster')
     this.role = 'broadcaster'
     this.metrics.role = 'broadcaster'
+    this.metrics.set({ role: 'broadcaster' })
     this.topology.role = 'broadcaster'
     this.metrics.set({ dataDirectory: this.currentDataPaths.baseDirectory })
     await this.walletReady
@@ -140,6 +142,7 @@ export class ZapCastApp extends SimpleEmitter {
     await this.prepareRole('viewer')
     this.role = 'viewer'
     this.metrics.role = 'viewer'
+    this.metrics.set({ role: 'viewer' })
     this.topology.role = 'viewer'
     this.metrics.set({ dataDirectory: this.currentDataPaths.baseDirectory })
     await this.walletReady
@@ -200,9 +203,19 @@ export class ZapCastApp extends SimpleEmitter {
       message: `${mode}: ${input}`
     })
     const result = await this.ingest.start({ input, mode, streamId })
-    this.metrics.startSession()
-    this.metrics.set({ playbackState: 'streaming' })
-    return result
+    this.metrics.set({ playbackState: 'connecting' })
+    try {
+      await this.ingest.waitForFirstAppend()
+      this.metrics.startSession()
+      this.metrics.set({ playbackState: 'streaming' })
+      return result
+    } catch (err) {
+      this.ingest.stop()
+      this.metrics.stopSession()
+      this.metrics.set({ playbackState: 'idle' })
+      this.metrics.recordError(err)
+      throw err
+    }
   }
 
   stopIngest () {
@@ -331,23 +344,6 @@ export class ZapCastApp extends SimpleEmitter {
     return this.topology.snapshot()
   }
 
-  zap (sats = 1000) {
-    const snapshot = this.metrics.snapshot()
-    const relayers = snapshot.connectedPeers.map(peer => ({
-      peerId: peer.peerId,
-      bytesUploaded: peer.bytesUploaded || 0,
-      uptime: snapshot.uptime
-    }))
-    this.payments = splitZap({ sats, relayers, currentPeerId: snapshot.peerId })
-    this.eventLog.add('mock_zap', {
-      role: this.role,
-      peerId: snapshot.peerId,
-      streamId: snapshot.streamId,
-      message: `${sats} sats`
-    })
-    return this.payments
-  }
-
   async tipBroadcaster () {
     throw new Error('Tips are signed by the renderer wallet. Use /api/record-transfer after sending.')
   }
@@ -452,14 +448,6 @@ export class ZapCastApp extends SimpleEmitter {
 
   paymentMetadata () {
     const wallet = this.wallet.snapshot()
-    if (this.paymentNetwork.kind === 'lightning') {
-      return {
-        network: this.paymentNetwork.key,
-        chainId: null,
-        asset: this.paymentNetwork.asset,
-        recipient: wallet.lightningAddress || ''
-      }
-    }
     return {
       network: this.paymentNetwork.key,
       chainId: this.paymentNetwork.chainId,

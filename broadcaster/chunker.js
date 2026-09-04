@@ -51,6 +51,7 @@ export class FfmpegChunker {
       const message = err?.message || String(err)
       this.lastStatus.running = false
       this.lastStatus.error = message
+      this.process = null
       this.logs.push(message)
       this.metrics?.recordError(err)
       this.logger?.add('error', {
@@ -90,7 +91,9 @@ export class FfmpegChunker {
 }
 
 export function buildFfmpegArgs ({ input, mode, outputDirectory, chunkDurationSeconds }) {
-  const args = ['-hide_banner', '-loglevel', 'info', '-analyzeduration', '10000000', '-probesize', '10000000']
+  // RTMP subscribers can attach between video keyframes. The stock x264 GOP is
+  // often 25 seconds, so a 10-second probe can see audio yet miss video entirely.
+  const args = ['-hide_banner', '-loglevel', 'info', '-analyzeduration', '30000000', '-probesize', '30000000']
   if (mode === 'file') args.push('-re')
   args.push('-i', input)
   args.push(

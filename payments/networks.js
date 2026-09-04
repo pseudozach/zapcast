@@ -1,18 +1,6 @@
-export const DEFAULT_PAYMENT_NETWORK = 'botchain-testnet'
+export const DEFAULT_PAYMENT_NETWORK = 'botchain-mainnet'
 
 export const PAYMENT_NETWORKS = Object.freeze({
-  'botchain-testnet': Object.freeze({
-    key: 'botchain-testnet',
-    name: 'BOTChain Testnet',
-    kind: 'evm',
-    chainId: 968,
-    rpcUrls: Object.freeze(['https://rpc.bohr.life']),
-    asset: 'BOT',
-    decimals: 18,
-    explorerUrl: 'https://scan.bohr.life',
-    faucetUrl: 'https://faucet.botchain.ai/basic',
-    testnet: true
-  }),
   'botchain-mainnet': Object.freeze({
     key: 'botchain-mainnet',
     name: 'BOTChain Mainnet',
@@ -21,37 +9,23 @@ export const PAYMENT_NETWORKS = Object.freeze({
     rpcUrls: Object.freeze(['https://rpc.botchain.ai']),
     asset: 'BOT',
     decimals: 18,
+    totalSupply: '150 Million',
     explorerUrl: 'https://scan.botchain.ai',
     faucetUrl: '',
     testnet: false
   }),
-  'arc-testnet': Object.freeze({
-    key: 'arc-testnet',
-    name: 'Arc Testnet',
+  'botchain-testnet': Object.freeze({
+    key: 'botchain-testnet',
+    name: 'BOTChain Testnet',
     kind: 'evm',
-    chainId: 5042002,
-    rpcUrls: Object.freeze([
-      'https://rpc.quicknode.testnet.arc.network',
-      'https://rpc.blockdaemon.testnet.arc.network',
-      'https://rpc.testnet.arc.network'
-    ]),
-    asset: 'USDC',
+    chainId: 968,
+    rpcUrls: Object.freeze(['https://rpc.bohr.life']),
+    asset: 'BOT',
     decimals: 18,
-    explorerUrl: 'https://testnet.arcscan.app',
-    faucetUrl: '',
+    totalSupply: '150 Million',
+    explorerUrl: 'https://scan.bohr.life',
+    faucetUrl: 'https://faucet.botchain.ai/basic',
     testnet: true
-  }),
-  lightning: Object.freeze({
-    key: 'lightning',
-    name: 'Lightning',
-    kind: 'lightning',
-    chainId: null,
-    rpcUrls: Object.freeze([]),
-    asset: 'BTC',
-    decimals: 8,
-    explorerUrl: '',
-    faucetUrl: '',
-    testnet: false
   })
 })
 
@@ -72,6 +46,7 @@ export function publicPaymentNetwork (network = getPaymentNetwork()) {
     chainId: network.chainId,
     asset: network.asset,
     decimals: network.decimals,
+    totalSupply: network.totalSupply,
     explorerUrl: network.explorerUrl,
     faucetUrl: network.faucetUrl,
     testnet: network.testnet

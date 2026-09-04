@@ -1,6 +1,6 @@
 import { DEFAULTS } from '../src/config.js'
 import { fsPromises, joinPath } from '../utils/platform.js'
-import { explorerTransactionUrl, getPaymentNetwork, publicPaymentNetwork } from './networks.js'
+import { DEFAULT_PAYMENT_NETWORK, explorerTransactionUrl, getPaymentNetwork, publicPaymentNetwork } from './networks.js'
 
 const WALLET_FILE = 'wallet.json'
 const WALLET_ARCHIVE_DIRECTORY = 'wallets'
@@ -190,7 +190,7 @@ export class PaymentWallet {
     return this.snapshot({ includeSecret: true })
   }
 
-  async updateSettings ({ forwardingAddress, forwardThreshold, lightningAddress } = {}) {
+  async updateSettings ({ forwardingAddress, forwardThreshold } = {}) {
     await this.ready()
     const patch = {}
     if (forwardingAddress !== undefined) {
@@ -202,11 +202,6 @@ export class PaymentWallet {
       const threshold = String(forwardThreshold || '').trim()
       if (!threshold || Number(threshold) < 0) throw new Error('Forward threshold must be zero or higher.')
       patch.forwardThreshold = threshold
-    }
-    if (lightningAddress !== undefined) {
-      const trimmed = String(lightningAddress || '').trim()
-      if (trimmed && !isLightningAddress(trimmed)) throw new Error('Lightning address must look like name@domain.')
-      patch.lightningAddress = trimmed
     }
     Object.assign(this.wallet, patch, { updatedAt: new Date().toISOString() })
     await this.writeWallet()
@@ -284,9 +279,10 @@ export class PaymentWallet {
       chainId: network.chainId,
       asset: network.asset,
       decimals: network.decimals,
+      totalSupply: network.totalSupply,
+      testnet: network.testnet,
       forwardingAddress: this.wallet.forwardingAddress,
       forwardThreshold: this.wallet.forwardThreshold,
-      lightningAddress: this.wallet.lightningAddress,
       transfersFile: joinPath(this.directory, TRANSFERS_FILE),
       explorerBaseUrl: network.explorerUrl,
       faucetUrl: network.faucetUrl
@@ -300,9 +296,8 @@ function normalizeWallet (wallet) {
     address: wallet.address || '',
     forwardingAddress: wallet.forwardingAddress || '',
     forwardThreshold: wallet.forwardThreshold || '0.1',
-    lightningAddress: wallet.lightningAddress || '',
-    network: wallet.network || 'arc-testnet',
-    asset: wallet.asset || 'USDC',
+    network: wallet.network || DEFAULT_PAYMENT_NETWORK,
+    asset: wallet.asset || 'BOT',
     createdAt: wallet.createdAt || '',
     updatedAt: wallet.updatedAt || '',
     lastUsedAt: wallet.lastUsedAt || ''
@@ -324,9 +319,10 @@ function emptyWallet (selectedNetwork = getPaymentNetwork()) {
     chainId: network.chainId,
     asset: network.asset,
     decimals: network.decimals,
+    totalSupply: network.totalSupply,
+    testnet: network.testnet,
     forwardingAddress: '',
     forwardThreshold: '0.1',
-    lightningAddress: '',
     transfersFile: '',
     explorerBaseUrl: network.explorerUrl,
     faucetUrl: network.faucetUrl
@@ -335,10 +331,6 @@ function emptyWallet (selectedNetwork = getPaymentNetwork()) {
 
 function isEvmAddress (value) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(value || ''))
-}
-
-function isLightningAddress (value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''))
 }
 
 function csvCell (value) {

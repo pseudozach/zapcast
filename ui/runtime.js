@@ -69,10 +69,6 @@ class ApiClient {
     return this.post('/api/topology', payload)
   }
 
-  async zap (sats = 1000) {
-    return this.post('/api/zap', { sats })
-  }
-
   async tip (payload) {
     return this.post('/api/tip', payload)
   }
@@ -132,6 +128,10 @@ class ApiClient {
     }
     this.emit('metrics', this.lastStatus.metrics)
     return wallet
+  }
+
+  async botPrice () {
+    return this.get('/api/bot-price')
   }
 
   async exportJson () {
@@ -285,11 +285,6 @@ class ApiClient {
 
 function paymentMetadataFromWallet (wallet) {
   if (!wallet) return null
-  if (wallet.paymentKind === 'lightning') {
-    return wallet.lightningAddress
-      ? { network: wallet.network, chainId: null, asset: wallet.asset, recipient: wallet.lightningAddress }
-      : null
-  }
   return wallet.address
     ? { network: wallet.network, chainId: wallet.chainId, asset: wallet.asset, recipient: wallet.address }
     : null

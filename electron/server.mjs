@@ -4,6 +4,7 @@ import { extname, resolve, sep } from 'node:path'
 import { ZapCastApp } from '../src/app-controller.js'
 import { postJson } from '../utils/http-json.js'
 import { getPaymentNetwork } from '../payments/networks.js'
+import { getBotPrice } from '../payments/bot-price.js'
 
 const paymentNetwork = getPaymentNetwork()
 
@@ -40,8 +41,13 @@ export async function createZapCastServer ({ rootDirectory }) {
 async function handleRequest ({ req, res, root, apps }) {
   const url = new URL(req.url, 'http://localhost')
   try {
-    if (url.pathname === '/api/payment-rpc' || url.pathname === '/api/arc-rpc') {
+    if (url.pathname === '/api/payment-rpc') {
       sendRawJson(res, await forwardPaymentRpc(await readJson(req)))
+      return
+    }
+
+    if (url.pathname === '/api/bot-price') {
+      sendJson(res, 200, { ok: true, result: await getBotPrice() })
       return
     }
 
@@ -98,7 +104,6 @@ async function dispatchApi (app, pathname, body, url) {
       await app.stopViewing()
       return app.status()
     case '/api/topology': return app.updateTopology(body)
-    case '/api/zap': return app.zap(body.sats || 1000)
     case '/api/tip': return app.tipBroadcaster(body)
     case '/api/payment-settings': return app.updatePaymentSettings(body)
     case '/api/reveal-wallet': return app.revealWallet()

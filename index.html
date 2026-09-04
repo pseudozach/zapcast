@@ -34,7 +34,7 @@
       <main>
         <section id="home" class="tab active">
           <div class="hero">
-            <h2>Watchers can relay streams and earn sats.</h2>
+            <h2>Watchers relay streams. Creators receive direct BOT tips.</h2>
             <div class="actions">
               <button id="homeCreate">Start Streaming</button>
               <button id="homeJoin" class="secondary">Join Stream</button>
@@ -99,18 +99,11 @@
                 <button type="button" id="stopViewing" class="secondary">Stop Viewing</button>
               </div>
               <video id="video" controls autoplay muted playsinline></video>
-              <div id="lightningReceive" class="lightning-card" hidden>
-                <div>
-                  <strong>Lightning address</strong>
-                  <div class="copy-field">
-                    <input id="viewerLightningAddress" readonly>
-                    <button type="button" id="copyLightningAddress" class="secondary">Copy</button>
-                  </div>
-                </div>
-                <img id="lightningQr" alt="Lightning address QR code">
-              </div>
               <div class="tip-row">
-                <label>Tip amount <input id="tipAmount" inputmode="decimal" value="1"></label>
+                <label>Tip amount (BOT)
+                  <input id="tipAmount" type="number" inputmode="decimal" min="0" step="0.001" value="0.01">
+                  <small id="tipUsdValue" class="fiat-value">Loading USD estimate…</small>
+                </label>
                 <button type="button" id="tipBroadcaster" class="secondary">Tip Broadcaster</button>
               </div>
               <div id="tipStatus" class="field-status"></div>
@@ -137,14 +130,15 @@
                 </div>
               </label>
               <label>Forwarding address <input id="forwardingAddress" placeholder="0x..."></label>
-              <label id="lightningAddressSetting" hidden>Lightning address <input id="lightningAddress" placeholder="name@example.com"></label>
-              <label>Auto-forward threshold <input id="forwardThreshold" inputmode="decimal" placeholder="0.1"></label>
+              <label>Auto-forward threshold (BOT)
+                <input id="forwardThreshold" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.1">
+                <small id="forwardThresholdUsd" class="fiat-value">USD estimate unavailable</small>
+              </label>
               <div class="actions">
                 <button type="button" id="openWalletExplorer" class="secondary">Open Explorer</button>
                 <button type="button" id="openPaymentFaucet" class="secondary">Get Test BOT</button>
                 <button type="button" id="savePaymentSettings">Save Payment Settings</button>
               </div>
-              <div id="paymentStats" class="metrics"></div>
             </div>
             <div class="panel">
               <h2>Nostr Identity</h2>
